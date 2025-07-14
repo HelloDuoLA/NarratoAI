@@ -262,15 +262,15 @@ def test_vision_model_connection(api_key, base_url, model_name, provider, tr):
                 ],
             )
             if response and response.choices:
-                return True, tr("QwenVL model is available")
+                return True, tr(f"{model_name} model is available")
             else:
-                return False, tr("QwenVL model returned invalid response")
+                return False, tr(f"{model_name} model returned invalid response")
 
         except Exception as e:
             # logger.debug(api_key)
             # logger.debug(base_url)
             # logger.debug(model_name)
-            return False, f"{tr('QwenVL model is not available')}: {str(e)}"
+            return False, f"{tr(f'{model_name} model is not available')}: {str(e)}"
 
 
 def render_vision_llm_settings(tr):
@@ -278,7 +278,7 @@ def render_vision_llm_settings(tr):
     st.subheader(tr("Vision Model Settings"))
 
     # 视频分析模型提供商选择
-    vision_providers = ['Siliconflow', 'Gemini', 'Gemini(OpenAI)', 'QwenVL', 'OpenAI']
+    vision_providers = ['Siliconflow', 'Gemini', 'Gemini(OpenAI)', 'QwenVL', 'OpenAI', 'ERNIE_AI_STUDIO','ERNIE']
     saved_vision_provider = config.app.get("vision_llm_provider", "Gemini").lower()
     saved_provider_index = 0
 
@@ -343,6 +343,17 @@ def render_vision_llm_settings(tr):
             tr("Vision Model Name"), 
             value=vision_model_name or "qwen-vl-max-latest",
             help=tr("Default: qwen-vl-max-latest")
+        )
+    elif vision_provider == 'ernie_ai_studio':
+        st_vision_base_url = st.text_input(
+            tr("Vision Base URL"), 
+            value=vision_base_url,
+            help=tr("Default: https://aistudio.baidu.com/llm/lmapi/v3")
+        )
+        st_vision_model_name = st.text_input(
+            tr("Vision Model Name"), 
+            value=vision_model_name or "ernie-4.5-turbo-vl-preview",
+            help=tr("Default: ernie-4.5-turbo-vl-preview")
         )
     else:
         st_vision_base_url = st.text_input(tr("Vision Base URL"), value=vision_base_url)
@@ -519,6 +530,7 @@ def test_text_model_connection(api_key, base_url, model_name, provider, tr):
                 return True, tr("OpenAI兼容Gemini代理连接成功")
             else:
                 return False, f"{tr('OpenAI兼容Gemini代理连接失败')}: HTTP {response.status_code}"
+        # OPEN AI 格式
         else:
             test_url = f"{base_url.rstrip('/')}/chat/completions"
 
@@ -555,7 +567,7 @@ def render_text_llm_settings(tr):
     st.subheader(tr("Text Generation Model Settings"))
 
     # 文案生成模型提供商选择
-    text_providers = ['OpenAI', 'Siliconflow', 'DeepSeek', 'Gemini', 'Gemini(OpenAI)', 'Qwen', 'Moonshot']
+    text_providers = ['OpenAI', 'Siliconflow', 'DeepSeek', 'Gemini', 'Gemini(OpenAI)', 'Qwen', 'Moonshot', 'ERNIE_AI_STUDIO','ERNIE']
     saved_text_provider = config.app.get("text_llm_provider", "OpenAI").lower()
     saved_provider_index = 0
 
@@ -571,6 +583,7 @@ def render_text_llm_settings(tr):
     )
     text_provider = text_provider.lower()
     config.app["text_llm_provider"] = text_provider
+    st.session_state['text_llm_provider'] = text_provider
 
     # 获取已保存的文本模型配置
     text_api_key = config.app.get(f"text_{text_provider}_api_key")

@@ -198,15 +198,21 @@ def _generate_response(prompt: str, llm_provider: str = None) -> str:
             base_url = config.app.get("deepseek_base_url")
             if not base_url:
                 base_url = "https://api.deepseek.com"
+        # 百度智能云平台API
         elif llm_provider == "ernie":
             api_key = config.app.get("ernie_api_key")
             secret_key = config.app.get("ernie_secret_key")
             base_url = config.app.get("ernie_base_url")
-            model_name = "***"
+            model_name = config.app.get("ernie_model_name")
             if not secret_key:
                 raise ValueError(
                     f"{llm_provider}: secret_key is not set, please set it in the config.toml file."
                 )
+        # 百度AI Studio API
+        elif llm_provider == "ernie_ai_studio":
+            api_key = config.app.get("text_ernie_ai_studio_api_key")
+            base_url = config.app.get("text_ernie_ai_studio_base_url")
+            model_name = config.app.get("text_ernie_ai_studio_model_name")
         else:
             raise ValueError(
                 "llm_provider is not set, please set it in the config.toml file."

@@ -270,6 +270,10 @@ class LLMConfigValidator:
             "siliconflow": {
                 "vision": ["Qwen/Qwen2.5-VL-32B-Instruct"],
                 "text": ["deepseek-ai/DeepSeek-R1", "Qwen/Qwen2.5-72B-Instruct"]
+            },
+            "ernie_ai_studio": {
+                "vision": ["ernie-4.5-turbo-vl-preview", "ernie-4.5-vl-28b-a3b"],
+                "text": ["ernie-4.5-turbo-vl-preview", "ernie-4.5-vl-28b-a3b"]
             }
         }
         

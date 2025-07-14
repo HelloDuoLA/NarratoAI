@@ -40,7 +40,7 @@ HWACCEL_PRIORITY = {
         "unknown": ["videotoolbox"]
     },
     "linux": {
-        "nvidia": ["cuda", "nvenc", "vaapi"],
+        "nvidia": ["nvenc", "cuda", "vaapi"],
         "amd": ["vaapi", "amf"],
         "intel": ["qsv", "vaapi"],
         "unknown": ["vaapi"]
