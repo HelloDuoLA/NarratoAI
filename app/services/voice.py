@@ -1034,12 +1034,16 @@ def is_azure_v2_voice(voice_name: str):
         return voice_name.replace("-V2", "").strip()
     return ""
 
+def is_minimax_voice(voice_name: str):
+    return "minimax" in  voice_name.lower()
 
 def tts(
     text: str, voice_name: str, voice_rate: float, voice_pitch: float, voice_file: str
 ) -> Union[SubMaker, None]:
     if is_azure_v2_voice(voice_name):
         return azure_tts_v2(text, voice_name, voice_file)
+    elif is_minimax_voice(voice_name):
+        pass
     return azure_tts_v1(text, voice_name, voice_rate, voice_pitch, voice_file)
 
 
@@ -1109,6 +1113,8 @@ def azure_tts_v1(
     return None
 
 
+def minimax_tts(text: str, voice_name: str, voice_file: str) -> Union[SubMaker, None]:
+    pass
 def azure_tts_v2(text: str, voice_name: str, voice_file: str) -> Union[SubMaker, None]:
     voice_name = is_azure_v2_voice(voice_name)
     if not voice_name:
@@ -1415,7 +1421,7 @@ def get_audio_duration(sub_maker: submaker.SubMaker):
         return 0.0
     return sub_maker.offset[-1][1] / 10000000
 
-
+# 直接被生成视频调用的函数
 def tts_multiple(task_id: str, list_script: list, voice_name: str, voice_rate: float, voice_pitch: float):
     """
     根据JSON文件中的多段文本进行TTS转换
@@ -1429,7 +1435,8 @@ def tts_multiple(task_id: str, list_script: list, voice_name: str, voice_rate: f
     voice_name = parse_voice_name(voice_name)
     output_dir = utils.task_dir(task_id)
     tts_results = []
-
+    
+    # 对每一个片段
     for item in list_script:
         if item['OST'] != 1:
             # 将时间戳中的冒号替换为下划线

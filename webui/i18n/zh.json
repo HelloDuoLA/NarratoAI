@@ -137,7 +137,7 @@
     "Script Uploaded Successfully": "脚本上传成功",
     "Invalid JSON format": "无效的JSON格式",
     "Upload failed": "上传失败",
-    "Video Subtitle Merge": "**合并视频与字幕**",
+    "Video Subtitle Merge": "**合并视频与字幕(将多个短视频合成一个长视频, :blue[点击展开])**",
     "Upload Video and Subtitle Files": "上传视频和字幕文件",
     "Matched File Pairs": "已匹配的文件对",
     "Merge All Files": "合并所有文件",

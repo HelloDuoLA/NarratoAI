@@ -93,7 +93,7 @@ def render_tts_settings(tr):
             logger.error(f"保存语音配置失败: {str(e)}")
 
     # minimax语音特殊处理
-    if "minimax" in selected_friendly_name.lower():
+    if voice.is_minimax_voice(voice_name):
         render_minimax_settings(tr)
     # Azure V2语音特殊处理
     elif voice.is_azure_v2_voice(voice_name):
@@ -259,6 +259,7 @@ def render_voice_preview(tr, voice_name):
                     voice_file=audio_file,
                 )
 
+            # 删除试听文件
             if sub_maker and os.path.exists(audio_file):
                 st.audio(audio_file, format="audio/mp3")
                 if os.path.exists(audio_file):
