@@ -79,7 +79,7 @@ class ErnieAIStudioVisionProvider(VisionModelProvider):
                     results.append(f"图片分析失败: {str(e)}")
         
         return results
-    
+    # TODO: 添加点前后文信息
     async def _analyze_image_batch(self,
                                  images: List[PIL.Image.Image],
                                  prompt: str,
@@ -120,6 +120,7 @@ class ErnieAIStudioVisionProvider(VisionModelProvider):
                     content = response.choices[0].message.content
                     results.append(content)
                     logger.debug(f"ERNIE AI Studio图片分析成功")
+                    logger.debug(f"content : {content}")
                 else:
                     results.append("ERNIE AI Studio API返回空响应")
                     

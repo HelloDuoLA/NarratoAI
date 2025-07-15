@@ -25,6 +25,7 @@ node_modules
 ./models/*
 resource/scripts/*.json
 resource/videos/*.mp4
+resource/videos/*.mov
 resource/songs/*.mp3
 resource/songs/*.flac
 resource/fonts/*.ttc
@@ -37,3 +38,4 @@ app/models/bert/*
 
 bug清单.md
 task.md
+

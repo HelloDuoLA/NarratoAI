@@ -17,7 +17,9 @@ import traceback
 import base64
 import io
 from app.utils import utils
-
+'''
+旧版
+'''
 
 class GeminiOpenAIAnalyzer:
     """OpenAI兼容的Gemini视觉分析器类"""

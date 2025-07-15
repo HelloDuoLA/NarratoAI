@@ -46,9 +46,12 @@ def load_config():
 
 def save_config():
     with open(config_file, "w", encoding="utf-8") as f:
+        # 确保当前内存中的配置同步到_cfg
         _cfg["app"] = app
         _cfg["azure"] = azure
         _cfg["ui"] = ui
+        _cfg["proxy"] = proxy
+        _cfg["frames"] = frames
         f.write(toml.dumps(_cfg))
 
 

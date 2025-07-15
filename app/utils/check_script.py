@@ -1,6 +1,9 @@
 import json
 from typing import Dict, Any
-
+'''
+检查脚本格式
+'''
+# TODO:需要进行修改吗？
 def check_format(script_content: str) -> Dict[str, Any]:
     """检查脚本格式
     Args:

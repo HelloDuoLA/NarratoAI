@@ -11,7 +11,9 @@ import PIL.Image
 import base64
 import io
 import traceback
-
+'''
+旧版
+'''
 
 class QwenAnalyzer:
     """千问视觉分析器类"""

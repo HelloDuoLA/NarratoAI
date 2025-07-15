@@ -29,7 +29,8 @@ class NarrationGenerationPrompt(TextPrompt):
         super().__init__(metadata)
         
         self._system_prompt = "你是一名专业的短视频解说文案撰写专家，擅长创作引人入胜的纪录片解说内容。"
-        
+
+# TODO:
     def get_template(self) -> str:
         return """我是一名荒野建造解说的博主，以下是一些同行的对标文案，请你深度学习并总结这些文案的风格特点跟内容特点：
 

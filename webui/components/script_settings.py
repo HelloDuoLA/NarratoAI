@@ -213,7 +213,7 @@ def render_video_details(tr):
     input_cols = st.columns(2)
 
     with input_cols[0]:
-        st.number_input(
+        frame_interval = st.number_input(
             tr("Frame Interval (seconds)"),
             min_value=0,
             value=st.session_state.get('frame_interval_input', config.frames.get('frame_interval_input', 3)),
@@ -222,13 +222,31 @@ def render_video_details(tr):
         )
 
     with input_cols[1]:
-        st.number_input(
+        vision_batch_size = st.number_input(
             tr("Batch Size"),
             min_value=0,
             value=st.session_state.get('vision_batch_size', config.frames.get('vision_batch_size', 10)),
             help=tr("Batch Size (More keyframes consume more tokens)"),
             key="vision_batch_size"
         )
+    
+    # 检查frames配置是否有变化并保存
+    frames_changed = False
+    if frame_interval != config.frames.get('frame_interval_input'):
+        config.frames['frame_interval_input'] = frame_interval
+        frames_changed = True
+    
+    if vision_batch_size != config.frames.get('vision_batch_size'):
+        config.frames['vision_batch_size'] = vision_batch_size
+        frames_changed = True
+    
+    # 如果有变化，保存配置
+    if frames_changed:
+        try:
+            config.save_config()
+        except Exception as e:
+            logger.error(f"保存frames配置失败: {str(e)}")
+    
     st.session_state['video_theme'] = video_theme
     st.session_state['custom_prompt'] = custom_prompt
     return video_theme, custom_prompt
@@ -236,56 +254,9 @@ def render_video_details(tr):
 
 def short_drama_summary(tr):
     """短剧解说 渲染视频主题和提示词"""
-    # 检查是否已经处理过字幕文件
-    if 'subtitle_file_processed' not in st.session_state:
-        st.session_state['subtitle_file_processed'] = False
+    # 渲染字幕文件选择
+    render_subtitle_file(tr)
     
-    subtitle_file = st.file_uploader(
-        tr("上传字幕文件"),
-        type=["srt"],
-        accept_multiple_files=False,
-        key="subtitle_file_uploader"  # 添加唯一key
-    )
-    
-    # 显示当前已上传的字幕文件路径
-    if 'subtitle_path' in st.session_state and st.session_state['subtitle_path']:
-        st.info(f"已上传字幕: {os.path.basename(st.session_state['subtitle_path'])}")
-        if st.button(tr("清除已上传字幕")):
-            st.session_state['subtitle_path'] = None
-            st.session_state['subtitle_file_processed'] = False
-            st.rerun()
-    
-    # 只有当有文件上传且尚未处理时才执行处理逻辑
-    if subtitle_file is not None and not st.session_state['subtitle_file_processed']:
-        try:
-            # 读取上传的SRT内容
-            script_content = subtitle_file.read().decode('utf-8')
-
-            # 保存到字幕目录
-            script_file_path = os.path.join(utils.subtitle_dir(), subtitle_file.name)
-            file_name, file_extension = os.path.splitext(subtitle_file.name)
-
-            # 如果文件已存在,添加时间戳
-            if os.path.exists(script_file_path):
-                timestamp = time.strftime("%Y%m%d%H%M%S")
-                file_name_with_timestamp = f"{file_name}_{timestamp}"
-                script_file_path = os.path.join(utils.subtitle_dir(), file_name_with_timestamp + file_extension)
-
-            # 直接写入SRT内容，不进行JSON转换
-            with open(script_file_path, "w", encoding='utf-8') as f:
-                f.write(script_content)
-
-            # 更新状态
-            st.success(tr("字幕上传成功"))
-            st.session_state['subtitle_path'] = script_file_path
-            st.session_state['subtitle_file_processed'] = True  # 标记已处理
-            
-            # 避免使用rerun，使用更新状态的方式
-            # st.rerun()
-            
-        except Exception as e:
-            st.error(f"{tr('Upload failed')}: {str(e)}")
-
     # 名称输入框
     video_theme = st.text_input(tr("短剧名称"))
     st.session_state['video_theme'] = video_theme
@@ -293,6 +264,85 @@ def short_drama_summary(tr):
     temperature = st.slider("temperature", 0.0, 2.0, 0.7)
     st.session_state['temperature'] = temperature
     return video_theme
+
+
+def render_subtitle_file(tr):
+    # TODO: 要进行函数测试，AI生成的
+    """渲染字幕文件选择"""
+    subtitle_list = [(tr("None"), ""), (tr("Upload Local Files"), "upload_local")]
+
+    # 获取已有字幕文件
+    suffix = "*.srt"
+    subtitle_dir = utils.subtitle_dir()
+    files = glob.glob(os.path.join(subtitle_dir, suffix))
+    file_list = []
+
+    for file in files:
+        file_list.append({
+            "name": os.path.basename(file),
+            "file": file,
+            "ctime": os.path.getctime(file)
+        })
+
+    file_list.sort(key=lambda x: x["ctime"], reverse=True)
+    for file in file_list:
+        display_name = file['file'].replace(config.root_dir, "")
+        subtitle_list.append((display_name, file['file']))
+
+    # 找到保存的字幕文件在列表中的索引
+    saved_subtitle_path = st.session_state.get('subtitle_path', '')
+    selected_index = 0
+    for i, (_, path) in enumerate(subtitle_list):
+        if path == saved_subtitle_path:
+            selected_index = i
+            break
+
+    selected_subtitle_index = st.selectbox(
+        tr("上传字幕文件"),
+        index=selected_index,
+        options=range(len(subtitle_list)),
+        format_func=lambda x: subtitle_list[x][0]
+    )
+
+    subtitle_path = subtitle_list[selected_subtitle_index][1]
+    st.session_state['subtitle_path'] = subtitle_path
+
+    # 处理字幕文件上传
+    if subtitle_path == "upload_local":
+        uploaded_file = st.file_uploader(
+            tr("Upload Local Files"),
+            type=["srt"],
+            accept_multiple_files=False,
+            key="subtitle_file_uploader"
+        )
+
+        if uploaded_file is not None:
+            try:
+                # 读取上传的SRT内容
+                script_content = uploaded_file.read().decode('utf-8')
+
+                # 保存到字幕目录
+                script_file_path = os.path.join(utils.subtitle_dir(), uploaded_file.name)
+                file_name, file_extension = os.path.splitext(uploaded_file.name)
+
+                # 如果文件已存在,添加时间戳
+                if os.path.exists(script_file_path):
+                    timestamp = time.strftime("%Y%m%d%H%M%S")
+                    file_name_with_timestamp = f"{file_name}_{timestamp}"
+                    script_file_path = os.path.join(utils.subtitle_dir(), file_name_with_timestamp + file_extension)
+
+                # 直接写入SRT内容，不进行JSON转换
+                with open(script_file_path, "w", encoding='utf-8') as f:
+                    f.write(script_content)
+
+                # 更新状态
+                st.success(tr("字幕上传成功"))
+                st.session_state['subtitle_path'] = script_file_path
+                time.sleep(1)
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"{tr('Upload failed')}: {str(e)}")
 
 
 def render_script_buttons(tr, params):

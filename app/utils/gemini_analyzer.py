@@ -12,7 +12,9 @@ import traceback
 import base64
 import io
 from app.utils import utils
-
+'''
+旧版
+'''
 
 class VisionAnalyzer:
     """原生Gemini视觉分析器类"""
