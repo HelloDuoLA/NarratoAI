@@ -60,6 +60,7 @@ app = _cfg.get("app", {})
 whisper = _cfg.get("whisper", {})
 proxy = _cfg.get("proxy", {})
 azure = _cfg.get("azure", {})
+minimax = _cfg.get("minimax", {})
 ui = _cfg.get("ui", {})
 frames = _cfg.get("frames", {})
 
