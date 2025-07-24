@@ -42,6 +42,7 @@ class GeminiVisionProvider(VisionModelProvider):
                            images: List[Union[str, Path, PIL.Image.Image]],
                            prompt: str,
                            batch_size: int = 10,
+                           max_concurrent_tasks: int = 7,
                            **kwargs) -> List[str]:
         """
         使用原生Gemini API分析图片
@@ -50,30 +51,58 @@ class GeminiVisionProvider(VisionModelProvider):
             images: 图片列表
             prompt: 分析提示词
             batch_size: 批处理大小
+            max_concurrent_tasks: 最大并发任务数
             **kwargs: 其他参数
             
         Returns:
             分析结果列表
         """
-        logger.info(f"开始分析 {len(images)} 张图片，使用原生Gemini API")
+        logger.info(f"开始分析 {len(images)} 张图片，使用原生Gemini API，最大并发任务数: {max_concurrent_tasks}")
         
         # 预处理图片
         processed_images = self._prepare_images(images)
         
+        # 创建信号量来限制并发数
+        semaphore = asyncio.Semaphore(max_concurrent_tasks)
+        
         # 分批处理
-        results = []
+        async def process_batch_with_semaphore(batch_index: int, batch: List[PIL.Image.Image]) -> tuple:
+            async with semaphore:
+                logger.info(f"处理第 {batch_index + 1} 批，共 {len(batch)} 张图片")
+                try:
+                    result = await self._analyze_batch(batch, prompt)
+                    return batch_index, result
+                except Exception as e:
+                    logger.error(f"批次 {batch_index + 1} 处理失败: {str(e)}")
+                    return batch_index, f"批次处理失败: {str(e)}"
+        
+        # 创建所有批次的任务
+        tasks = []
         for i in range(0, len(processed_images), batch_size):
             batch = processed_images[i:i + batch_size]
-            logger.info(f"处理第 {i//batch_size + 1} 批，共 {len(batch)} 张图片")
-            
-            try:
-                result = await self._analyze_batch(batch, prompt)
-                results.append(result)
-            except Exception as e:
-                logger.error(f"批次 {i//batch_size + 1} 处理失败: {str(e)}")
-                results.append(f"批次处理失败: {str(e)}")
+            batch_index = i // batch_size
+            task = process_batch_with_semaphore(batch_index, batch)
+            tasks.append(task)
         
-        return results
+        # 并发执行所有任务
+        task_results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # 按批次顺序整理结果
+        results = [None] * len(tasks)
+        for task_result in task_results:
+            if isinstance(task_result, Exception):
+                logger.error(f"任务执行异常: {str(task_result)}")
+                # 找到第一个空位置放置错误结果
+                for i in range(len(results)):
+                    if results[i] is None:
+                        results[i] = f"任务执行异常: {str(task_result)}"
+                        break
+            else:
+                batch_index, result = task_result
+                results[batch_index] = result
+        
+        # 过滤掉None值并返回
+        return [result for result in results if result is not None]
     
     async def _analyze_batch(self, batch: List[PIL.Image.Image], prompt: str) -> str:
         """分析一批图片"""

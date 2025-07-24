@@ -1,4 +1,5 @@
 
+streamlit run webui.py --server.maxUploadSize=2048
 <div align="center">
 <h1 align="center" style="font-size: 2cm;"> NarratoAI 😎📽️ </h1>
 <h3 align="center">一站式 AI 影视解说+自动化剪辑工具🎬🎞️ </h3>

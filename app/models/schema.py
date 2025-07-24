@@ -386,7 +386,7 @@ class VideoClipParams(BaseModel):
     subtitle_position: str = "bottom"   # top, bottom, center, custom
     custom_position: float = 70.0       # 自定义位置
 
-    n_threads: Optional[int] = Field(default=16, description="线程数")    # 线程数，有助于提升视频处理速度
+    n_threads: Optional[int] = Field(default=30, description="线程数")    # 线程数，有助于提升视频处理速度
 
     tts_volume: Optional[float] = Field(default=AudioVolumeDefaults.TTS_VOLUME, description="解说语音音量（后处理）")
     original_volume: Optional[float] = Field(default=AudioVolumeDefaults.ORIGINAL_VOLUME, description="视频原声音量")

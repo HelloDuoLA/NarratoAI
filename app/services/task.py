@@ -70,6 +70,7 @@ def start_subclip(task_id: str, params: VideoClipParams, subclip_path_videos: di
         voice_name=params.voice_name,
         voice_rate=params.voice_rate,
         voice_pitch=params.voice_pitch,
+        enable_subtitles=params.subtitle_enabled,
     )
 
     sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=20)

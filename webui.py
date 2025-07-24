@@ -175,7 +175,7 @@ def render_generate_button():
         )
 
         video_files = result.get("videos", [])
-        st.success(tr("视生成完成"))
+        st.success(tr("视频生成完成"))
 
         try:
             if video_files:

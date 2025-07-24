@@ -39,3 +39,4 @@ app/models/bert/*
 bug清单.md
 task.md
 
+resource/tts_tmp/*

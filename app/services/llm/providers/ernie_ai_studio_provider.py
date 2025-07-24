@@ -63,72 +63,66 @@ class ErnieAIStudioVisionProvider(VisionModelProvider):
         # 预处理图片
         processed_images = self._prepare_images(images)
         
-        # 分批处理图片
+        # 分批处理
         results = []
         for i in range(0, len(processed_images), batch_size):
-            batch_images = processed_images[i:i+batch_size]
+            batch = processed_images[i:i + batch_size]
+            logger.info(f"处理第 {i//batch_size + 1} 批，共 {len(batch)} 张图片")
             
             try:
-                batch_results = await self._analyze_image_batch(batch_images, prompt, **kwargs)
-                results.extend(batch_results)
-                
+                result = await self._analyze_batch(batch, prompt)
+                results.append(result)
             except Exception as e:
-                logger.error(f"批次 {i//batch_size + 1} 分析失败: {str(e)}")
-                # 为失败的批次添加错误信息
-                for _ in batch_images:
-                    results.append(f"图片分析失败: {str(e)}")
+                logger.error(f"批次 {i//batch_size + 1} 处理失败: {str(e)}")
+                results.append(f"批次处理失败: {str(e)}")
         
         return results
-    # TODO: 添加点前后文信息
-    async def _analyze_image_batch(self,
-                                 images: List[PIL.Image.Image],
-                                 prompt: str,
-                                 **kwargs) -> List[str]:
-        """分析一批图片"""
-        results = []
+    
+    async def _analyze_batch(self, images: List[PIL.Image.Image], prompt: str) -> str:
+        """
+        分析一批图片，返回统一的分析结果
         
-        for image in images:
-            try:
-                # 将图片转换为base64编码
+        Args:
+            images: PIL图片对象列表
+            prompt: 分析提示词
+            
+        Returns:
+            批量分析的综合结果
+        """
+        try:
+            # 将多张图片组合成一个请求
+            content_parts = [{"type": "text", "text": prompt}]
+            
+            # 添加所有图片
+            for image in images:
                 image_base64 = self._image_to_base64(image)
-                
-                # 构建消息
-                messages = [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{image_base64}"
-                                }
-                            }
-                        ]
+                content_parts.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{image_base64}"
                     }
-                ]
+                })
+            
+            messages = [{"role": "user", "content": content_parts}]
+            
+            # 发送API请求
+            response = await asyncio.to_thread(
+                self.client.chat.completions.create,
+                model=self.model_name,
+                messages=messages,
+                max_tokens=12000
+            )
+            
+            if response.choices and len(response.choices) > 0:
+                content = response.choices[0].message.content
+                logger.debug(f"ERNIE AI Studio批量分析成功，图片数量: {len(images)}")
+                return content
+            else:
+                raise APICallError("ERNIE AI Studio API返回空响应")
                 
-                # 发送API请求
-                response = await asyncio.to_thread(
-                    self.client.chat.completions.create,
-                    model=self.model_name,
-                    messages=messages,
-                    max_tokens=4000
-                )
-                
-                if response.choices and len(response.choices) > 0:
-                    content = response.choices[0].message.content
-                    results.append(content)
-                    logger.debug(f"ERNIE AI Studio图片分析成功")
-                    logger.debug(f"content : {content}")
-                else:
-                    results.append("ERNIE AI Studio API返回空响应")
-                    
-            except Exception as e:
-                logger.error(f"ERNIE AI Studio图片分析失败: {str(e)}")
-                results.append(f"图片分析失败: {str(e)}")
-        
-        return results
+        except Exception as e:
+            logger.error(f"ERNIE AI Studio批量分析失败: {str(e)}")
+            raise APICallError(f"批量分析失败: {str(e)}")
     
     def _image_to_base64(self, image: PIL.Image.Image) -> str:
         """将PIL图片转换为base64编码"""
@@ -139,10 +133,6 @@ class ErnieAIStudioVisionProvider(VisionModelProvider):
         image.save(buffered, format="JPEG", quality=85)
         img_str = base64.b64encode(buffered.getvalue()).decode()
         return img_str
-    
-    async def _make_api_call(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """执行API调用"""
-        pass
 
 
 class ErnieAIStudioTextProvider(TextModelProvider):
@@ -244,7 +234,3 @@ class ErnieAIStudioTextProvider(TextModelProvider):
         output = output.strip()
         
         return output
-    
-    async def _make_api_call(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """执行API调用 - 由于使用OpenAI SDK，这个方法主要用于兼容基类"""
-        pass

@@ -10,7 +10,7 @@ def render_subtitle_panel(tr):
         st.write(tr("Subtitle Settings"))
 
         # 启用字幕选项
-        enable_subtitles = st.checkbox(tr("Enable Subtitles"), value=True)
+        enable_subtitles = st.checkbox(tr("Enable Subtitles"), value=False)
         st.session_state['subtitle_enabled'] = enable_subtitles
 
         if enable_subtitles:
