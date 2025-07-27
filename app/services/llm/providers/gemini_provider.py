@@ -27,6 +27,7 @@ class GeminiVisionProvider(VisionModelProvider):
     @property
     def supported_models(self) -> List[str]:
         return [
+            "gemini-2.5-flash",
             "gemini-2.0-flash-lite",
             "gemini-2.0-flash",
             "gemini-1.5-pro",
@@ -128,7 +129,7 @@ class GeminiVisionProvider(VisionModelProvider):
                 "temperature": 1.0,
                 "topK": 40,
                 "topP": 0.95,
-                "maxOutputTokens": 4000,
+                "maxOutputTokens": 8192,
                 "candidateCount": 1
             },
             "safetySettings": [
@@ -156,6 +157,77 @@ class GeminiVisionProvider(VisionModelProvider):
         
         # 解析响应
         return self._parse_vision_response(response_data)
+
+    # 新增: 用于处理带字幕的图片分析
+    async def analyze_image_with_subtitle(self,
+                           images: List[Union[str, Path, PIL.Image.Image]],
+                           prompt: str,
+                           **kwargs) -> List[str]:
+        """
+        使用原生Gemini API分析图片
+        
+        Args:
+            images: 图片列表
+            prompt: 分析提示词
+            **kwargs: 其他参数
+            
+        Returns:
+            分析结果列表
+        """
+
+        # 预处理图片
+        processed_images = self._prepare_images(images)
+        
+        parts = [{"text": prompt}]
+        
+        # 添加图片数据
+        for img in processed_images:
+            img_data = self._image_to_base64(img)
+            parts.append({
+                "inline_data": {
+                    "mime_type": "image/jpeg",
+                    "data": img_data
+                }
+            })
+        
+        payload = {
+            "systemInstruction": {
+                "parts": [{"text": "你是一位专业的视觉内容分析师，请仔细分析图片内容并提供详细描述。"}]
+            },
+            "contents": [{"parts": parts}],
+            "generationConfig": {
+                "temperature": 1.0,
+                "topK": 40,
+                "topP": 0.95,
+                "maxOutputTokens": 8192,
+                "candidateCount": 1
+            },
+            "safetySettings": [
+                {
+                    "category": "HARM_CATEGORY_HARASSMENT",
+                    "threshold": "BLOCK_NONE"
+                },
+                {
+                    "category": "HARM_CATEGORY_HATE_SPEECH", 
+                    "threshold": "BLOCK_NONE"
+                },
+                {
+                    "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                    "threshold": "BLOCK_NONE"
+                },
+                {
+                    "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                    "threshold": "BLOCK_NONE"
+                }
+            ]
+        }
+        
+        # 发送API请求
+        response_data = await self._make_api_call(payload)
+        
+        # 解析响应并返回
+        return self._parse_vision_response(response_data)
+        
     
     def _image_to_base64(self, img: PIL.Image.Image) -> str:
         """将PIL图片转换为base64编码"""
@@ -194,7 +266,19 @@ class GeminiVisionProvider(VisionModelProvider):
         
         # 检查是否被安全过滤阻止
         if "finishReason" in candidate and candidate["finishReason"] == "SAFETY":
+            safety_ratings = candidate.get("safetyRatings", [])
+            logger.warning(f"内容被Gemini安全过滤器阻止，安全评级: {safety_ratings}")
             raise ContentFilterError("内容被Gemini安全过滤器阻止")
+        
+        # 检查是否因为长度限制停止
+        if "finishReason" in candidate and candidate["finishReason"] == "MAX_TOKENS":
+            logger.warning("Gemini因达到最大token限制而停止生成，内容可能被截断")
+            # 继续处理，但记录警告
+        
+        # 记录完成原因（用于调试）
+        finish_reason = candidate.get("finishReason", "UNKNOWN")
+        if finish_reason != "STOP":
+            logger.info(f"Gemini完成原因: {finish_reason}（非正常STOP）")
         
         if "content" not in candidate or "parts" not in candidate["content"]:
             raise APICallError("原生Gemini API返回内容格式错误")
@@ -221,6 +305,7 @@ class GeminiTextProvider(TextModelProvider):
     @property
     def supported_models(self) -> List[str]:
         return [
+            "gemini-2.5-flash",
             "gemini-2.0-flash-lite",
             "gemini-2.0-flash",
             "gemini-1.5-pro",
@@ -348,10 +433,21 @@ class GeminiTextProvider(TextModelProvider):
             logger.warning(f"内容被Gemini安全过滤器阻止，安全评级: {safety_ratings}")
             raise ContentFilterError("内容被Gemini安全过滤器阻止")
 
+        # 检查是否因为长度限制停止
+        if finish_reason == "MAX_TOKENS":
+            logger.warning("Gemini因达到最大token限制而停止生成，内容可能被截断")
+            # 继续处理，但记录警告
+
         # 检查是否因为其他原因停止
         if finish_reason in ["RECITATION", "OTHER"]:
             logger.warning(f"Gemini因为{finish_reason}原因停止生成")
             raise APICallError(f"Gemini因为{finish_reason}原因停止生成")
+        
+        # 记录正常完成
+        if finish_reason == "STOP":
+            logger.debug("Gemini正常完成文本生成")
+        elif finish_reason not in ["MAX_TOKENS"]:
+            logger.info(f"Gemini以非标准原因完成: {finish_reason}")
 
         if "content" not in candidate:
             logger.error(f"Gemini候选响应中缺少content字段: {candidate}")

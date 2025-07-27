@@ -350,7 +350,8 @@ def merge_materials(
             audio_codec="aac",
             temp_audiofile_path=output_dir,
             threads=threads,
-            fps=fps,
+            fps=fps
+            # ffmpeg_params=["-gpu", "cuda"]
         )
         logger.success(f"素材合并完成: {output_path}")
     except Exception as e:

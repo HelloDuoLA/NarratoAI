@@ -9,6 +9,7 @@ from app.config import config
 # 导入新的LLM服务模块 - 确保提供商被注册
 import app.services.llm  # 这会触发提供商注册
 from app.services.llm.migration_adapter import create_vision_analyzer as create_vision_analyzer_new
+from app.services.llm.migration_adapter import create_text_analyzer as create_text_analyzer_new
 # 保留旧的导入以确保向后兼容
 from app.utils import gemini_analyzer, qwenvl_analyzer
 
@@ -46,7 +47,21 @@ def create_vision_analyzer(provider, api_key, model, base_url):
                 base_url=base_url
             )
 
+def create_text_analyzer(provider, api_key, model, base_url):
+    """
+    创建文本分析器实例 - 已重构为使用新的LLM服务架构
 
+    Args:
+        provider: 提供商名称 ('gemini', 'gemini(openai)', 'qwenvl', 'siliconflow')
+        api_key: API密钥
+        model: 模型名称
+        base_url: API基础URL
+
+    Returns:
+        视觉分析器实例
+    """
+    return create_text_analyzer_new(provider, api_key, model, base_url)
+    
 def get_batch_timestamps(batch_files, prev_batch_files=None):
     """
     解析一批文件的时间戳范围,支持毫秒级精度
@@ -145,8 +160,8 @@ def get_batch_files(keyframe_files, result, batch_size=5):
     batch_end = min(batch_start + batch_size, len(keyframe_files))
     return keyframe_files[batch_start:batch_end]
 
-
-def chekc_video_config(video_params):
+# ?实际上还有没有作用呢?
+def check_video_config(video_params):
     """
     检查视频分析配置
     """

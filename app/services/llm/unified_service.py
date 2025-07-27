@@ -74,6 +74,99 @@ class UnifiedLLMService:
             raise LLMServiceError(f"图片分析失败: {str(e)}")
     
     @staticmethod
+    async def analyze_image_with_subtitle(images: List[Union[str, Path, PIL.Image.Image]],
+                prompt: str,
+                provider: Optional[str] = None,
+                **kwargs) -> List[str]:
+        try:
+            # 获取视觉模型提供商
+            vision_provider = LLMServiceManager.get_vision_provider(provider)
+            
+            # 执行图片分析
+            result = await vision_provider.analyze_image_with_subtitle(
+                images=images,
+                prompt=prompt,
+                **kwargs
+            )
+            
+            logger.info(f"图片分析完成，共处理 {len(images)} 张图片.")
+            return result
+            
+        except Exception as e:
+            logger.error(f"图片分析失败: {str(e)}")
+            raise LLMServiceError(f"图片分析失败: {str(e)}")
+    
+    @staticmethod
+    async def analyze_themes(text_content: str,
+                           prompt: Optional[str] = None,
+                           provider: Optional[str] = None,
+                           temperature: float = 1.0,
+                           response_format: str = "json",
+                           **kwargs) -> List[Dict[str, Any]]:
+        """
+        分析文本主题
+        
+        Args:
+            text_content: 要分析的文本内容
+            prompt: 分析提示词，如果不指定则使用默认主题分析提示
+            provider: 文本模型提供商名称，如果不指定则使用配置中的默认值
+            temperature: 生成温度
+            response_format: 响应格式，默认为 'json'
+            **kwargs: 其他参数
+            
+        Returns:
+            主题分析结果列表，每个元素包含主题名称、描述和相关性评分
+            
+        Raises:
+            LLMServiceError: 服务调用失败时抛出
+        """
+        try:
+            # 如果没有指定提示词，使用默认的主题分析提示
+            if prompt is None:
+                prompt = f"""
+                    基于以下文本内容，请提取出主要主题。
+
+                    文本内容:
+                    {text_content}
+
+                    请分析文本的核心主题，并按重要性排序。每个主题应该包含主题名称和详细描述。
+
+                    请务必使用 JSON 格式输出：
+                    {{
+                    "themes": [
+                        {{
+                            "theme_name": "主题名称",
+                            "theme_description": "主题的详细描述",
+                            "relevance_score": 0.95
+                        }},
+                        {{
+                            "theme_name": "次要主题名称", 
+                            "theme_description": "次要主题的详细描述",
+                            "relevance_score": 0.80
+                        }}
+                    ]
+                    }}
+
+                    请只返回 JSON 字符串，不要包含任何其他解释性文字。
+                """
+            
+            # 获取文本模型提供商
+            text_provider = LLMServiceManager.get_text_provider(provider)
+            
+            # 执行主题分析
+            result = await text_provider.generate_text(
+                prompt=prompt,
+                temperature=temperature,
+                response_format=response_format,
+                **kwargs
+            )
+            return result            
+        except Exception as e:
+            logger.error(f"主题分析失败: {str(e)}")
+            raise LLMServiceError(f"主题分析失败: {str(e)}")
+        
+    
+    @staticmethod
     async def generate_text(prompt: str,
                           system_prompt: Optional[str] = None,
                           provider: Optional[str] = None,
@@ -271,4 +364,14 @@ async def generate_text_unified(prompt: str,
     """便捷的文本生成函数"""
     return await UnifiedLLMService.generate_text(
         prompt, system_prompt, provider, temperature, response_format=response_format
+    )
+
+
+async def analyze_theme_unified(text_content: str,
+                              prompt: Optional[str] = None,
+                              provider: Optional[str] = None,
+                              temperature: float = 1.0) -> List[Dict[str, Any]]:
+    """便捷的主题分析函数"""
+    return await UnifiedLLMService.analyze_theme(
+        text_content, prompt, provider, temperature
     )

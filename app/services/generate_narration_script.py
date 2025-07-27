@@ -21,7 +21,9 @@ from app.services.llm.migration_adapter import generate_narration as generate_na
 # 导入新的提示词管理系统
 from app.services.prompts import PromptManager
 
+# TODO:要新融合字幕和画面的json转markdown格式的文件，或者说有必要转成markdown嘛
 
+# 这是纪录片剪辑方式调用的函数, 将视频分析的json转换为Markdown格式
 def parse_frame_analysis_to_markdown(json_file_path):
     """
     解析视频帧分析JSON文件并转换为Markdown格式

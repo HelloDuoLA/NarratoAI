@@ -109,6 +109,13 @@ class VisionModelProvider(BaseLLMProvider):
         """
         pass
     
+    @abstractmethod
+    async def analyze_image_with_subtitle(images: List[Union[str, Path, PIL.Image.Image]],
+                prompt: str,
+                provider: Optional[str] = None,
+                **kwargs) -> List[str]:
+        pass
+    
     def _prepare_images(self, images: List[Union[str, Path, PIL.Image.Image]]) -> List[PIL.Image.Image]:
         """预处理图片，统一转换为PIL.Image对象"""
         processed_images = []

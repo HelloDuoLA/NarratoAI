@@ -10,7 +10,7 @@ from datetime import datetime
 
 from app.config import config
 from app.utils import utils, video_processor
-from webui.tools.base import create_vision_analyzer, get_batch_files, get_batch_timestamps, chekc_video_config
+from webui.tools.base import create_vision_analyzer, get_batch_files, get_batch_timestamps, check_video_config
 
 
 def generate_script_docu(params):
@@ -129,14 +129,9 @@ def generate_script_docu(params):
                 update_progress(30, "正在初始化视觉分析器...")
 
                 # 从配置中获取相关配置
-                if vision_llm_provider == 'gemini':
-                    vision_api_key = st.session_state.get('vision_gemini_api_key')
-                    vision_model = st.session_state.get('vision_gemini_model_name')
-                    vision_base_url = st.session_state.get('vision_gemini_base_url')
-                else:
-                    vision_api_key = st.session_state.get(f'vision_{vision_llm_provider}_api_key')
-                    vision_model = st.session_state.get(f'vision_{vision_llm_provider}_model_name')
-                    vision_base_url = st.session_state.get(f'vision_{vision_llm_provider}_base_url')
+                vision_api_key = st.session_state.get(f'vision_{vision_llm_provider}_api_key')
+                vision_model = st.session_state.get(f'vision_{vision_llm_provider}_model_name')
+                vision_base_url = st.session_state.get(f'vision_{vision_llm_provider}_base_url')
 
                 # 创建视觉分析器实例
                 llm_params = {
@@ -160,27 +155,28 @@ def generate_script_docu(params):
 
                 # 执行异步分析
                 vision_batch_size = st.session_state.get('vision_batch_size') or config.frames.get("vision_batch_size")
+                # TODO: %s 实际上没有替代为实际数字
                 vision_analysis_prompt = """
-我提供了 %s 张视频帧，它们按时间顺序排列，代表一个连续的视频片段。请仔细分析每一帧的内容，并关注帧与帧之间的变化，以理解整个片段的活动。
+                    我提供了 %s 张视频帧，它们按时间顺序排列，代表一个连续的视频片段。请仔细分析每一帧的内容，并关注帧与帧之间的变化，以理解整个片段的活动。
 
-首先，请详细描述每一帧的关键视觉信息（包含：主要内容、人物、动作和场景）。
-然后，基于所有帧的分析，请用**简洁的语言**总结整个视频片段中发生的主要活动或事件流程。
+                    首先，请详细描述每一帧的关键视觉信息（包含：主要内容、人物、动作和场景）。
+                    然后，基于所有帧的分析，请用**简洁的语言**总结整个视频片段中发生的主要活动或事件流程。
 
-请务必使用 JSON 格式输出你的结果。JSON 结构应如下：
-{
-  "frame_observations": [
-    {
-      "frame_number": 1, // 或其他标识帧的方式
-      "observation": "描述每张视频帧中的主要内容、人物、动作和场景。"
-    },
-    // ... 更多帧的观察 ...
-  ],
-  "overall_activity_summary": "在这里填写你总结的整个片段的主要活动，保持简洁。"
-}
+                    请务必使用 JSON 格式输出你的结果。JSON 结构应如下：
+                    {
+                    "frame_observations": [
+                        {
+                        "frame_number": 1, // 或其他标识帧的方式
+                        "observation": "描述每张视频帧中的主要内容、人物、动作和场景。"
+                        },
+                        // ... 更多帧的观察 ...
+                    ],
+                    "overall_activity_summary": "在这里填写你总结的整个片段的主要活动，保持简洁。"
+                    }
 
-请务必不要遗漏视频帧，我提供了 %s 张视频帧，frame_observations 必须包含 %s 个元素
+                    请务必不要遗漏视频帧，我提供了 %s 张视频帧，frame_observations 必须包含 %s 个元素
 
-请只返回 JSON 字符串，不要包含任何其他解释性文字。
+                    请只返回 JSON 字符串，不要包含任何其他解释性文字。
                 """
                 results = loop.run_until_complete(
                     analyzer.analyze_images(
@@ -380,7 +376,7 @@ def generate_script_docu(params):
                     "text_model_name": text_model,
                     "text_base_url": text_base_url
                 })
-                chekc_video_config(llm_params)
+                check_video_config(llm_params)
                 # 整理帧分析数据
                 markdown_output = parse_frame_analysis_to_markdown(analysis_json_path)
 
@@ -402,6 +398,7 @@ def generate_script_docu(params):
 
                 narration_dict = narration_data['items']
                 # 为 narration_dict 中每个 item 新增一个 OST: 2 的字段, 代表保留原声和配音
+                # TODO:为什么?新增一个 OST: 2 的字段, 代表保留原声和配音，这里固定为2可能是以为视频没有声音
                 narration_dict = [{**item, "OST": 2} for item in narration_dict]
                 logger.info(f"解说文案生成完成，共 {len(narration_dict)} 个片段")
                 # 结果转换为JSON字符串
