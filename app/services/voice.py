@@ -109,6 +109,7 @@ def parse_voice_name(name: str):
     # zh-CN-YunxiNeural-Male
     # zh-CN-XiaoxiaoMultilingualNeural-V2-Female
     name = name.replace("-Female", "").replace("-Male", "").strip()
+    # name = name.replace("_minimax", "")
     return name
 
 
@@ -238,8 +239,7 @@ def minimax_tts(text: str, voice_name: str, voice_file: str) -> Union[SubMaker, 
     
     model = config.minimax.get("select_model", "")
     language_boost = config.minimax.get("select_language", "")
-    if "_minimax" in voice_name:
-        voice_name = voice_name.replace("_minimax", "")
+    voice_name = voice_name.replace("_minimax", "")
     config_ = {
         "model" : model,
         "stream" : False,  # 是否使用流式
@@ -604,7 +604,7 @@ def get_audio_duration(sub_maker: submaker.SubMaker):
     return sub_maker.offset[-1][1] / 10000000
 
 # 直接被生成视频调用的函数
-def tts_multiple(task_id: str, list_script: list, voice_name: str, voice_rate: float, voice_pitch: float):
+def tts_multiple(task_id: str, list_script: list, voice_name: str, voice_rate: float, voice_pitch: float, enable_subtitles: bool):
     """
     根据JSON文件中的多段文本进行TTS转换
     
@@ -642,8 +642,19 @@ def tts_multiple(task_id: str, list_script: list, voice_name: str, voice_rate: f
                              f"或者使用其他 tts 引擎")
                 continue
             else:
+                if enable_subtitles:
                 # 为当前片段生成字幕文件
-                _, duration = create_subtitle(sub_maker=sub_maker, text=text, subtitle_file=subtitle_file)
+                    subtitle_result = create_subtitle(sub_maker=sub_maker, text=text, subtitle_file=subtitle_file)
+                    if subtitle_result is not None:
+                        _, duration = subtitle_result
+                    else:
+                        duration = get_audio_duration(sub_maker)
+                        logger.warning(f"字幕生成失败，使用音频时长作为默认值: {duration}")
+                else:
+                    logger.info(f"字幕生成被禁用，使用音频时长")
+                    # subtitle_file = None
+                    duration = get_audio_duration(sub_maker)
+                    
 
             tts_results.append({
                 "_id": item['_id'],
