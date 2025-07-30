@@ -86,6 +86,18 @@
     "Hide Log": "Hide Log",
     "Upload Local Files": "Upload Local Files",
     "File Uploaded Successfully": "File Uploaded Successfully",
-    "Frame Interval (seconds)": "Frame Interval (seconds) (More keyframes consume more tokens)"
+    "Frame Interval (seconds)": "Frame Interval (seconds) (More keyframes consume more tokens)",
+    "Speech Recognition": "Speech Recognition",
+    "Upload Video for Speech Recognition": "Upload Video for Speech Recognition",
+    "Video Upload Successful": "Video Upload Successful",
+    "Perform Speech Recognition": "Perform Speech Recognition",
+    "Starting Speech Recognition": "Starting Speech Recognition...",
+    "Extracting Audio from Video": "Extracting Audio from Video...",
+    "Separating Vocals and Background Music": "Separating Vocals and Background Music...",
+    "Uploading Audio to Cloud Storage": "Uploading Audio to Cloud Storage...",
+    "Performing Speech Recognition": "Performing Speech Recognition...",
+    "Speech Recognition Completed": "Speech Recognition Completed!",
+    "Speech Recognition Failed": "Speech Recognition Failed, Please Check Logs",
+    "Speech Recognition Error": "Error During Speech Recognition Process"
   }
 }

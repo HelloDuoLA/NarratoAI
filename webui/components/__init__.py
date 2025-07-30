@@ -4,6 +4,7 @@ from .video_settings import render_video_panel
 from .audio_settings import render_audio_panel
 from .subtitle_settings import render_subtitle_panel
 from .review_settings import render_review_panel
+from .tts_settings import render_tts_settings
 
 __all__ = [
     'render_basic_settings',
@@ -11,5 +12,6 @@ __all__ = [
     'render_video_panel',
     'render_audio_panel',
     'render_subtitle_panel',
-    'render_review_panel'
+    'render_review_panel',
+    'render_tts_settings'
 ] 
