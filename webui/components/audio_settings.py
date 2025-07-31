@@ -7,7 +7,8 @@ from app.services import voice
 from app.models.schema import AudioVolumeDefaults
 from app.utils import utils
 from webui.utils.cache import get_songs_cache
-
+from .select_high_quality_clips import select_high_quality_clips
+from .minimax_clone import clone_voice
 
 def render_audio_panel(tr):
     """渲染音频设置面板"""
@@ -173,6 +174,187 @@ def render_minimax_settings(tr):
         options=support_language_boost,
         key="minimax_language_selection",
     )
+    
+    # TODO:增加音色选择
+    # 1. 增加一个按钮进行音色选择
+    if "自定义" in st.session_state["voice_selection"]:
+        if st.button(tr("音色片段提取")):
+            # 定义临时目录路径
+            TEMP_TTS_DIR = os.path.join("storage", "temp", "TTS")
+
+            # 确保临时目录存在
+            os.makedirs(TEMP_TTS_DIR, exist_ok=True)
+            video_origin_path = st.session_state['video_origin_path']
+            srt_path = st.session_state['subtitle_path']
+            video_name = os.path.splitext(os.path.basename(video_origin_path))[0]
+            clips_dir = os.path.join(TEMP_TTS_DIR, f"{video_name}_processing", "timbre_clips")
+            os.makedirs(clips_dir, exist_ok=True)
+            extracted_files = [os.path.join(clips_dir, f) for f in os.listdir(clips_dir) if os.path.isfile(os.path.join(clips_dir, f))]
+            if len(extracted_files) == 0:
+                extracted_files = select_high_quality_clips(
+                        srt_file_path=srt_path,
+                        video_file_path=video_origin_path, # !有背景声，还是用人声视频吧
+                        output_dir=clips_dir
+                    )
+
+            
+            # 将提取的文件列表保存到session_state中
+            st.session_state['extracted_files'] = extracted_files
+
+        # 音频文件列表展示和播放组件 - 移到按钮点击事件外面，让它始终显示
+        if st.session_state.get('extracted_files'):
+            # 如果正在显示克隆输入框，则显示克隆界面
+            if st.session_state.get('show_clone_input') is not None:
+                clone_index = st.session_state.get('show_clone_input')
+                audio_path = st.session_state['extracted_files'][clone_index]
+                
+                st.subheader(f"🎤 {tr('音色克隆')}")
+                st.write(f"📁 {tr('选中的音频')}: {os.path.basename(audio_path)}")
+                
+                # 显示当前选中音频的播放器
+                try:
+                    with open(audio_path, "rb") as audio_file:
+                        audio_bytes = audio_file.read()
+                    st.audio(audio_bytes, format="audio/wav")
+                except FileNotFoundError:
+                    st.error(tr("音频文件未找到"))
+                except Exception as e:
+                    st.error(f"{tr('播放音频时出错')}: {str(e)}")
+                
+                st.markdown("---")
+                
+                # 克隆输入界面
+                with st.container():
+                    st.write(f"✏️ {tr('为音色克隆起个名字')}:")
+                    
+                    # 创建三列：输入框和按钮
+                    col_input, col_clone, col_cancel = st.columns([3, 1, 1])
+                    
+                    with col_input:
+                        voice_clone_name = st.text_input(
+                            tr("音色名称"),
+                            key=f"voice_name_input_{clone_index}",
+                            placeholder=tr("请输入音色名称")
+                        )
+                    
+                    with col_clone:
+                        # 添加空标签来对齐高度
+                        st.markdown("&nbsp;", unsafe_allow_html=True)
+                        if st.button(tr("开始克隆"), key=f"clone_{clone_index}", use_container_width=True):
+                            if voice_clone_name.strip():
+                                with st.spinner(tr("正在克隆音色，请稍候...")):
+                                    try:
+                                        # 调用声音克隆功能
+                                        # clone_result = clone_voice(
+                                        #     config=config,
+                                        #     file_path=audio_path,
+                                        #     voice_id=voice_clone_name.strip()
+                                        # )
+
+                                        clone_result = True
+                                        if clone_result:
+                                            # 构建音色名称（添加-minimax后缀）
+                                            voice_key = f"{voice_clone_name.strip()}_minimax"
+                                            voice_display_name = f"{voice_clone_name.strip()}-minimax"
+                                            
+                                            # 添加到配置文件的support_voices中
+                                            if "support_voices" not in config.minimax:
+                                                config.minimax["support_voices"] = {}
+                                            
+                                            config.minimax["support_voices"][voice_key] = voice_display_name
+        
+                                            
+                                            # 保存配置文件
+                                            try:
+                                                config.save_config()
+                                                logger.info(f"新音色已添加到配置: {voice_key} = {voice_display_name}")
+                                            except Exception as save_error:
+                                                logger.error(f"保存配置文件失败: {str(save_error)}")
+                                            
+                                            st.success(f"🎉 {tr('音色克隆成功')}! {tr('音色名称')}: {voice_display_name}")
+                                            st.info(f"✅ {tr('音色已添加到语音选项中，页面将自动刷新以选中新音色')}")
+                                            
+                                            # 清除克隆输入状态
+                                            st.session_state['show_clone_input'] = None
+                                            
+                                            # 延迟刷新页面以避免session_state冲突
+                                            import time
+                                            time.sleep(2)  # 让用户看到成功信息
+                                            st.rerun()
+                                        else:
+                                            st.error(tr("音色克隆失败，请重试"))
+                                    except Exception as e:
+                                        st.error(f"{tr('克隆过程中出错')}: {str(e)}")
+                            else:
+                                st.warning(tr("请输入音色名称"))
+                    
+                    with col_cancel:
+                        # 添加空标签来对齐高度
+                        st.markdown("&nbsp;", unsafe_allow_html=True)
+                        if st.button(tr("返回列表"), key=f"cancel_{clone_index}", use_container_width=True):
+                            st.session_state['show_clone_input'] = None
+                            st.rerun()
+                    
+            
+            else:
+                # 显示音频文件列表
+                st.write(tr("音色片段列表"))
+                
+                # 使用文件列表替换原来的滑块
+                selected_audio_index = st.session_state.get('selected_audio_index', 0)
+                
+                # 创建一个可滚动的容器来显示文件列表
+                with st.container():
+                    # 使用columns创建一个可滚动的区域
+                    scroll_area = st.container(height=250)
+                    
+                    with scroll_area:
+                        # 显示音频文件列表
+                        for i, audio_path in enumerate(st.session_state['extracted_files']):
+                            # 检查是否是当前选中的音频
+                            is_selected = i == st.session_state.get('selected_audio_index', 0)
+                            
+                            col1, col2, col3 = st.columns([3, 1, 1])
+                            
+                            with col1:
+                                # 如果是选中的音频，高亮显示
+                                if is_selected:
+                                    st.markdown(f"**🎵 {tr('音频')} {i+1}: {os.path.basename(audio_path)}**")
+                                else:
+                                    st.write(f"{tr('音频')} {i+1}: {os.path.basename(audio_path)}")
+                            
+                            with col2:
+                                # 播放按钮 - 点击后显示音频播放器
+                                if st.button(tr("试听"), key=f"play_{i}"):
+                                    st.session_state['selected_audio_index'] = i
+                                    st.rerun()  # 立即重新运行以更新显示
+                                    
+                            with col3:
+                                # 选择按钮
+                                if st.button(tr("克隆"), key=f"select_{i}"):
+                                    st.session_state['selected_audio_index'] = i
+                                    st.session_state['show_clone_input'] = i  # 显示克隆输入框
+                                    st.rerun()
+                            
+                            # 显示当前选中音频的播放器
+                            if is_selected:
+                                try:
+                                    with open(audio_path, "rb") as audio_file:
+                                        audio_bytes = audio_file.read()
+                                    st.audio(audio_bytes, format="audio/wav")
+                                    st.markdown("---")  # 分隔线
+                                except FileNotFoundError:
+                                    st.error(tr("音频文件未找到"))
+                                except Exception as e:
+                                    st.error(f"{tr('播放音频时出错')}: {str(e)}")
+                
+                # 显示当前选中的音频文件
+                if selected_audio_index < len(st.session_state['extracted_files']):
+                    selected_audio_path = st.session_state['extracted_files'][selected_audio_index]
+                    st.write(f"{tr('当前选中')}: {os.path.basename(selected_audio_path)}")
+        
+        elif st.session_state.get('extracted_files') is not None:
+            st.info(tr("未找到符合条件的音色片段"))
 
     # 保存设置
     config.minimax["MINIMAX_GROUP_ID"] = minimax_group_id
@@ -277,7 +459,7 @@ def render_bgm_settings(tr):
 
     selected_index = st.selectbox(
         tr("Background Music"),
-        index=1,
+        index=0,
         options=range(len(bgm_options)),
         format_func=lambda x: bgm_options[x][0],
     )

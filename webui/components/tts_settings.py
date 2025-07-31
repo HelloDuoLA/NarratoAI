@@ -362,8 +362,8 @@ def extract_audio_from_video(video_path: str, video_name: str, work_dir: str, st
         "ffmpeg", "-i", video_path,
         "-vn",  # 不包含视频
         "-acodec", "pcm_s16le",  # 16位PCM编码
-        "-ar", "44100",  # 采样率44.1kHz
-        "-ac", "2",  # 双声道
+        "-ar", "48000",  # 采样率48kHz
+        "-ac", "1",  # 单声道
         "-y",  # 覆盖输出文件
         audio_path
     ]
