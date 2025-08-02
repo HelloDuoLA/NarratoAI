@@ -41,3 +41,5 @@ task.md
 
 resource/tts_tmp/*
 test/*
+myCode/*
+pretrained_models/*

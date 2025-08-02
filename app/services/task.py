@@ -3,8 +3,10 @@ import json
 import os.path
 import re
 import traceback
+import streamlit as st
 from os import path
 from loguru import logger
+from datetime import datetime
 
 from app.config import config
 from app.config.audio_config import AudioConfig, get_recommended_volumes_for_content
@@ -13,6 +15,7 @@ from app.models.schema import VideoClipParams
 from app.services import (voice, audio_merger, subtitle_merger, clip_video, merger_video, update_script, generate_video)
 from app.services import state as sm
 from app.utils import utils
+from .tts_final import perform_speech_recognition
 
 
 def start_subclip(task_id: str, params: VideoClipParams, subclip_path_videos: dict):
@@ -95,8 +98,9 @@ def start_subclip(task_id: str, params: VideoClipParams, subclip_path_videos: di
     # sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=40)
 
     """
-    3. 裁剪视频 - 将超出音频长度的视频进行裁剪
+    3. 裁剪视频 - 将超出音频长度的视频进行裁剪 
     """
+    # TODO:这么做合理么
     logger.info("\n\n## 3. 裁剪视频")
     video_clip_result = clip_video.clip_video(params.video_origin_path, tts_results)
     # 更新 list_script 中的时间戳
@@ -198,12 +202,22 @@ def start_subclip(task_id: str, params: VideoClipParams, subclip_path_videos: di
 
     final_video_paths.append(output_video_path)
     combined_video_paths.append(combined_video_path)
+    
+    '''
+    7. 语音识别字幕, 并且进行视频裁剪
+    '''
+    # TODO:语音识别字幕
+    current_date = datetime.now().strftime("%Y%m%d_%H%M")
+    result = perform_speech_recognition(combined_video_path, video_name=f"{current_date}_output_video")
 
     logger.success(f"任务 {task_id} 已完成, 生成 {len(final_video_paths)} 个视频.")
+    logger.success(f"视频路径: {final_video_paths[0]}")
+    logger.success(f"字幕路径: {result['final_subtitle_file']}")
 
     kwargs = {
         "videos": final_video_paths,
-        "combined_videos": combined_video_paths
+        "combined_videos": combined_video_paths,
+        "subtitle" : result["final_subtitle_file"]
     }
     sm.state.update_task(task_id, state=const.TASK_STATE_COMPLETE, progress=100, **kwargs)
     return kwargs

@@ -1,5 +1,8 @@
 import streamlit as st
 import os
+import json
+import requests
+import urllib.parse
 from uuid import uuid4
 from loguru import logger
 from app.config import config
@@ -8,7 +11,53 @@ from app.models.schema import AudioVolumeDefaults
 from app.utils import utils
 from webui.utils.cache import get_songs_cache
 from .select_high_quality_clips import select_high_quality_clips
-from .minimax_clone import clone_voice
+from .minimax_clone import clone_voice_minimax
+
+
+def download_demo_audio(demo_audio_url: str, voice_name: str) -> str:
+    """
+    下载demo音频文件到本地temp目录
+    
+    Args:
+        demo_audio_url: demo音频的URL
+        voice_name: 音色名称，用于创建文件名
+    
+    Returns:
+        本地文件路径，如果下载失败返回None
+    """
+    try:
+        # 创建demo音频保存目录
+        demo_audio_dir = os.path.join("storage", "temp", "demo_audio")
+        os.makedirs(demo_audio_dir, exist_ok=True)
+        
+        # 解析URL获取文件扩展名
+        parsed_url = urllib.parse.urlparse(demo_audio_url)
+        path = parsed_url.path
+        file_extension = os.path.splitext(path)[1] or '.mp3'  # 默认为mp3
+        
+        # 创建本地文件名
+        safe_voice_name = "".join(c for c in voice_name if c.isalnum() or c in ('-', '_')).rstrip()
+        local_filename = f"{safe_voice_name}_demo_{str(uuid4())[:8]}{file_extension}"
+        local_path = os.path.join(demo_audio_dir, local_filename)
+        
+        # 下载文件
+        logger.info(f"开始下载demo音频: {demo_audio_url}")
+        response = requests.get(demo_audio_url, stream=True, timeout=30)
+        response.raise_for_status()
+        
+        # 保存到本地
+        with open(local_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        
+        file_size = os.path.getsize(local_path) / 1024  # KB
+        logger.info(f"demo音频下载成功: {local_path}, 大小: {file_size:.1f} KB")
+        return local_path
+        
+    except Exception as e:
+        logger.error(f"下载demo音频失败: {str(e)}")
+        return None
+
 
 def render_audio_panel(tr):
     """渲染音频设置面板"""
@@ -87,6 +136,18 @@ def render_tts_settings(tr):
     # 如果有切换，马上更新config并持久化保存
     if voice_name != config.ui.get("voice_name", ""):
         config.ui["voice_name"] = voice_name
+        
+        # 清除demo音频状态，当切换到非自定义音色时
+        if "自定义" not in selected_friendly_name:
+            if 'show_demo_audio' in st.session_state:
+                st.session_state['show_demo_audio'] = False
+            if 'demo_audio_url' in st.session_state:
+                del st.session_state['demo_audio_url']
+            if 'demo_voice_name' in st.session_state:
+                del st.session_state['demo_voice_name']
+            if 'demo_audio_path' in st.session_state:
+                del st.session_state['demo_audio_path']
+        
         try:
             config.save_config()
             logger.info(f"语音设置已保存: {voice_name}")
@@ -127,6 +188,7 @@ def render_azure_v2_settings(tr):
 
 def render_minimax_settings(tr):
     """渲染minimax语音设置"""
+    
     saved_minimax_group_id = config.minimax.get("MINIMAX_GROUP_ID", "")
     saved_minimax_key = config.minimax.get("MINIMAX_KEY", "")
 
@@ -179,6 +241,16 @@ def render_minimax_settings(tr):
     # 1. 增加一个按钮进行音色选择
     if "自定义" in st.session_state["voice_selection"]:
         if st.button(tr("音色片段提取")):
+            # 清除之前的demo音频状态
+            if 'show_demo_audio' in st.session_state:
+                st.session_state['show_demo_audio'] = False
+            if 'demo_audio_url' in st.session_state:
+                del st.session_state['demo_audio_url']
+            if 'demo_voice_name' in st.session_state:
+                del st.session_state['demo_voice_name']
+            if 'demo_audio_path' in st.session_state:
+                del st.session_state['demo_audio_path']
+                
             # 定义临时目录路径
             TEMP_TTS_DIR = os.path.join("storage", "temp", "TTS")
 
@@ -190,10 +262,11 @@ def render_minimax_settings(tr):
             clips_dir = os.path.join(TEMP_TTS_DIR, f"{video_name}_processing", "timbre_clips")
             os.makedirs(clips_dir, exist_ok=True)
             extracted_files = [os.path.join(clips_dir, f) for f in os.listdir(clips_dir) if os.path.isfile(os.path.join(clips_dir, f))]
+            audio_path =  os.path.join(TEMP_TTS_DIR, f"{video_name}_processing", f"vocals.wav")
             if len(extracted_files) == 0:
                 extracted_files = select_high_quality_clips(
                         srt_file_path=srt_path,
-                        video_file_path=video_origin_path, # !有背景声，还是用人声视频吧
+                        video_file_path=audio_path, # TODO:有背景声，还是用人声视频吧
                         output_dir=clips_dir
                     )
 
@@ -245,15 +318,18 @@ def render_minimax_settings(tr):
                                 with st.spinner(tr("正在克隆音色，请稍候...")):
                                     try:
                                         # 调用声音克隆功能
-                                        # clone_result = clone_voice(
-                                        #     config=config,
-                                        #     file_path=audio_path,
-                                        #     voice_id=voice_clone_name.strip()
-                                        # )
+                                        clone_result = clone_voice_minimax(
+                                            config=config,
+                                            file_path=audio_path,
+                                            voice_id=voice_clone_name.strip()
+                                        )
 
-                                        clone_result = True
-                                        if clone_result:
+                                        # clone_result = True
+                                        base_resp = clone_result["base_resp"]
+                                        if base_resp.get("status_code") == 0:
+                                            demo_audio = clone_result.get("demo_audio", "")
                                             # 构建音色名称（添加-minimax后缀）
+
                                             voice_key = f"{voice_clone_name.strip()}_minimax"
                                             voice_display_name = f"{voice_clone_name.strip()}-minimax"
                                             
@@ -274,6 +350,12 @@ def render_minimax_settings(tr):
                                             st.success(f"🎉 {tr('音色克隆成功')}! {tr('音色名称')}: {voice_display_name}")
                                             st.info(f"✅ {tr('音色已添加到语音选项中，页面将自动刷新以选中新音色')}")
                                             
+                                            # 如果有demo音频链接，保存到session_state以便刷新后仍能显示
+                                            if demo_audio:
+                                                st.session_state['demo_audio_url'] = demo_audio
+                                                st.session_state['demo_voice_name'] = voice_clone_name.strip()
+                                                st.session_state['show_demo_audio'] = True
+                                            
                                             # 清除克隆输入状态
                                             st.session_state['show_clone_input'] = None
                                             
@@ -282,7 +364,7 @@ def render_minimax_settings(tr):
                                             time.sleep(2)  # 让用户看到成功信息
                                             st.rerun()
                                         else:
-                                            st.error(tr("音色克隆失败，请重试"))
+                                            st.error(tr(f"音色克隆失败，请重试 错误码: {base_resp.get('status_code')} 原因: {base_resp.get('status_msg', '未知错误')}"))
                                     except Exception as e:
                                         st.error(f"{tr('克隆过程中出错')}: {str(e)}")
                             else:
@@ -355,6 +437,40 @@ def render_minimax_settings(tr):
         
         elif st.session_state.get('extracted_files') is not None:
             st.info(tr("未找到符合条件的音色片段"))
+
+    # 检查是否有待显示的demo音频
+    if st.session_state.get('show_demo_audio') and st.session_state.get('demo_audio_url'):
+        demo_audio_url = st.session_state['demo_audio_url']
+        demo_voice_name = st.session_state.get('demo_voice_name', 'Unknown')
+        
+        st.markdown("---")
+        st.subheader("🎵 音色克隆演示音频")
+        st.write(f"📻 音色名称: **{demo_voice_name}**")
+        
+        # 检查是否已经下载过这个音频
+        demo_audio_path = st.session_state.get('demo_audio_path')
+        
+        if not demo_audio_path or not os.path.exists(demo_audio_path):
+            st.info("🎵 正在下载演示音频...")
+            # 下载音频
+            demo_audio_path = download_demo_audio(demo_audio_url, demo_voice_name)
+            if demo_audio_path:
+                st.session_state['demo_audio_path'] = demo_audio_path
+        
+        # 显示音频播放器
+        if demo_audio_path and os.path.exists(demo_audio_path):
+            st.success("📻 演示音频下载完成，可以试听新音色效果：")
+            try:
+                with open(demo_audio_path, "rb") as demo_file:
+                    demo_audio_bytes = demo_file.read()
+                st.audio(demo_audio_bytes, format="audio/mp3")
+            except Exception as audio_error:
+                logger.error(f"播放demo音频失败: {str(audio_error)}")
+                st.error("演示音频播放失败")
+        else:
+            st.error("演示音频下载失败")
+        
+        st.markdown("---")
 
     # 保存设置
     config.minimax["MINIMAX_GROUP_ID"] = minimax_group_id

@@ -55,6 +55,8 @@
     "Stroke Color": "描边颜色",
     "Stroke Width": "描边粗细",
     "Generate Video": "生成视频",
+    "Download Video": "下载视频",
+    "Download Subtitle": "下载字幕",
     "Video Script and Subject Cannot Both Be Empty": "视频主题 和 视频文案，不能同时为空",
     "Generating Video": "正在生成视频，请稍候...",
     "Start Generating Video": "开始生成视频",

@@ -92,6 +92,23 @@ class LegacyLLMAdapter:
         return VisionAnalyzerAdapter(provider, api_key, model, base_url)
     
     @staticmethod
+    def create_text_analyzer(provider: str, api_key: str, model: str, base_url: str = None):
+        """
+        创建文本分析器实例 - 兼容原有接口
+
+        Args:
+            provider: 提供商名称
+            api_key: API密钥
+            model: 模型名称
+            base_url: API基础URL
+            
+        Returns:
+            适配器实例
+        """
+        return TextAnalyzerAdapter(provider, api_key, model, base_url)
+    
+    
+    @staticmethod
     def generate_narration(markdown_content: str, api_key: str, base_url: str, model: str) -> str:
         """
         生成解说文案 - 兼容原有接口
@@ -105,11 +122,12 @@ class LegacyLLMAdapter:
         Returns:
             生成的解说文案JSON字符串
         """
+        #TODO:这里修改成粤语养生prompt，后续要单独搞个脚本类型再说
         try:
             # 使用新的提示词管理系统
             prompt = PromptManager.get_prompt(
-                category="documentary",
-                name="narration_generation",
+                category="health",#"documentary",
+                name="cantonese_health_documentary",#"narration_generation",
                 parameters={
                     "video_frame_description": markdown_content
                 }
@@ -214,6 +232,63 @@ class VisionAnalyzerAdapter:
 
         except Exception as e:
             logger.error(f"图片分析失败: {str(e)}")
+            raise
+    
+    # 新增：分析带有字幕的画面
+    async def analyze_image_with_subtitle(self,
+                    images: List[Union[str, Path, PIL.Image.Image]],
+                    prompt: str,
+                    index: int,
+                    **kwargs) -> List[str]:
+        try:
+            # 使用统一服务分析图片
+            result = await UnifiedLLMService.analyze_image_with_subtitle(
+                images=images,
+                prompt=prompt,
+                provider=self.provider,
+            )
+            logger.info(f"第{index}段带字幕的图片分析完成，共处理 {len(images)} 张图片")
+            compatible_results = [{
+                'index' : index,
+                'response': result,
+                'model_used': self.model
+            }]
+                
+            return compatible_results
+
+        except Exception as e:
+            # logger.error(f"图片分析失败: {str(e)}")
+            raise
+        
+class TextAnalyzerAdapter:
+    """文本分析器适配器"""
+    def __init__(self, provider: str, api_key: str, model: str, base_url: str = None):
+        self.provider = provider
+        self.api_key = api_key
+        self.model = model
+        self.base_url = base_url
+    
+    async def analyze_themes(self, text_content: str, custom_prompt: str = None) -> List[Dict[str, Any]]:
+        """
+        分析文本主题 - 兼容原有接口
+
+        Args:
+            text_content: 要分析的文本内容
+            custom_prompt: 自定义分析提示词，如果不提供则使用默认的主题分析提示
+
+        Returns:
+            主题分析结果列表，格式与旧实现兼容
+        """
+        try:
+            # 使用统一服务分析主题
+            results = await UnifiedLLMService.analyze_themes(
+                text_content=text_content,
+                prompt=custom_prompt,  # 如果为 None，统一服务会使用默认提示
+                provider=self.provider
+            )
+            return results
+        except Exception as e:
+            logger.error(f"主题分析失败: {str(e)}")
             raise
 
 
@@ -343,6 +418,10 @@ class SubtitleAnalyzerAdapter:
 def create_vision_analyzer(provider: str, api_key: str, model: str, base_url: str = None):
     """创建视觉分析器 - 全局函数"""
     return LegacyLLMAdapter.create_vision_analyzer(provider, api_key, model, base_url)
+
+def create_text_analyzer(provider: str, api_key: str, model: str, base_url: str = None):
+    """创建文本分析器 - 全局函数"""
+    return LegacyLLMAdapter.create_text_analyzer(provider, api_key, model, base_url)
 
 
 def generate_narration(markdown_content: str, api_key: str, base_url: str, model: str) -> str:

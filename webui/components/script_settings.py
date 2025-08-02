@@ -12,7 +12,7 @@ from app.utils import utils, check_script
 from webui.tools.generate_script_docu import generate_script_docu
 from webui.tools.generate_script_short import generate_script_short
 from webui.tools.generate_short_summary import generate_script_short_sunmmary
-
+from webui.tools.generate_script_health_video import generate_script_health_video
 
 def render_script_panel(tr):
     """渲染脚本配置面板"""
@@ -38,7 +38,10 @@ def render_script_panel(tr):
             render_short_generate_options(tr)
         elif script_path == "summary":
             # 短剧解说
-            short_drama_summary(tr)
+            render_short_drama_summary(tr)
+        elif script_path == "health_video":
+            # 粤语养生视频解说
+            render_health_video(tr)
         else:
             # 默认为空
             pass
@@ -54,6 +57,7 @@ def render_script_file(tr, params):
         (tr("Auto Generate"), "auto"),
         (tr("Short Generate"), "short"),
         (tr("Short Drama Summary"), "summary"),
+        (tr("粤语养生节目短视频解说（没完成）"), "health_video"),
         (tr("Upload Script"), "upload_script")
     ]
 
@@ -181,13 +185,13 @@ def render_video_file(tr, params):
                 time.sleep(1)
                 st.rerun()
 
-
+# 短剧混剪
 def render_short_generate_options(tr):
     """
     渲染Short Generate模式下的特殊选项
     在Short Generate模式下，替换原有的输入框为自定义片段选项
     """
-    short_drama_summary(tr)
+    render_short_drama_summary(tr)
     # 显示自定义片段数量选择器
     custom_clips = st.number_input(
         tr("自定义片段"),
@@ -199,7 +203,7 @@ def render_short_generate_options(tr):
     )
     st.session_state['custom_clips'] = custom_clips
 
-
+# 画面解说详情
 def render_video_details(tr):
     """画面解说 渲染视频主题和提示词"""
     video_theme = st.text_input(tr("Video Theme"))
@@ -209,8 +213,8 @@ def render_video_details(tr):
         help=tr("Custom prompt for LLM, leave empty to use default prompt"),
         height=180
     )
-    # 非短视频模式下显示原有的三个输入框
-    input_cols = st.columns(2)
+    # 横着的框两个
+    input_cols = st.columns(2) 
 
     with input_cols[0]:
         frame_interval = st.number_input(
@@ -251,8 +255,54 @@ def render_video_details(tr):
     st.session_state['custom_prompt'] = custom_prompt
     return video_theme, custom_prompt
 
+# TODO:渲染健康视频剪辑选项
+def render_health_video(tr):
+    render_subtitle_file(tr)
+    
+    # 数字输入框
+    temperature = st.slider("temperature", 0.0, 2.0, 0.7)
+    st.session_state['temperature'] = temperature
+    
+    # 非短视频模式下显示原有的三个输入框
+    input_cols = st.columns(2)
 
-def short_drama_summary(tr):
+    with input_cols[0]:
+        second_per_frame = st.number_input(
+            tr("间隔多少秒提取一帧"),
+            min_value=1,
+            value=st.session_state.get('second_per_frame', config.frames.get('second_per_frame', 3)),
+            help=tr("Frame Interval (seconds) (More keyframes consume more tokens)"),
+            key="second_per_frame"
+        )
+
+    with input_cols[1]:
+        max_concurrent_LLM_requests = st.number_input(
+            tr("分析画面时的并发数量"),
+            min_value=1,
+            value=st.session_state.get('max_concurrent_LLM_requests', config.frames.get('max_concurrent_LLM_requests', 7)),
+            help=tr("进行画面分析时，需要分片段进行，并发数量与API性能有关，目前Gemini是30, 而百度是3，遇到问题适当调低"),
+            key="max_concurrent_LLM_requests"
+        )
+    
+    # 检查frames配置是否有变化并保存
+    frames_changed = False
+    if second_per_frame != config.frames.get('second_per_frame'):
+        config.frames['second_per_frame'] = second_per_frame
+        frames_changed = True
+    
+    if max_concurrent_LLM_requests != config.frames.get('max_concurrent_LLM_requests'):
+        config.frames['max_concurrent_LLM_requests'] = max_concurrent_LLM_requests
+        frames_changed = True
+    
+    # 如果有变化，保存配置
+    if frames_changed:
+        try:
+            config.save_config()
+        except Exception as e:
+            logger.error(f"保存frames配置失败: {str(e)}")
+    
+
+def render_short_drama_summary(tr):
     """短剧解说 渲染视频主题和提示词"""
     # 渲染字幕文件选择
     render_subtitle_file(tr)
@@ -357,6 +407,8 @@ def render_script_buttons(tr, params):
         button_name = tr("Generate Short Video Script")
     elif script_path == "summary":
         button_name = tr("生成短剧解说脚本")
+    elif script_path == "health_video":
+        button_name = tr("生成粤语养生节目短视频脚本")
     elif script_path.endswith("json"):
         button_name = tr("Load Video Script")
     else:
@@ -376,7 +428,14 @@ def render_script_buttons(tr, params):
             video_theme = st.session_state.get('video_theme')
             temperature = st.session_state.get('temperature')
             generate_script_short_sunmmary(params, subtitle_path, video_theme, temperature)
+        elif script_path == "health_video":
+            # 执行 健康视频 脚本生成, 结合画面和字幕
+            subtitle_path = st.session_state.get('subtitle_path') # 获取字幕文件
+            temperature = st.session_state.get('temperature')
+            #? temperature 需要吗?
+            generate_script_health_video(params, subtitle_path)
         else:
+            # 加载已有脚本
             load_script(tr, script_path)
 
     # 视频脚本编辑区
@@ -388,14 +447,15 @@ def render_script_buttons(tr, params):
 
     # 操作按钮行
     button_cols = st.columns(3)
+    # 检查格式
     with button_cols[0]:
         if st.button(tr("Check Format"), key="check_format", use_container_width=True):
             check_script_format(tr, video_clip_json_details)
-
+    # 保存脚本
     with button_cols[1]:
         if st.button(tr("Save Script"), key="save_script", use_container_width=True):
             save_script(tr, video_clip_json_details)
-
+    # 裁剪视频
     with button_cols[2]:
         script_valid = st.session_state.get('script_format_valid', False)
         if st.button(tr("Crop Video"), key="crop_video", disabled=not script_valid, use_container_width=True):

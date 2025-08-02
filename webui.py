@@ -13,15 +13,15 @@ from app.models.schema import VideoClipParams, VideoAspect
 
 # 初始化配置 - 必须是第一个 Streamlit 命令
 st.set_page_config(
-    page_title="NarratoAI",
+    page_title="🤖✂️ AI铰剪",
     page_icon="📽️",
     layout="wide",
     initial_sidebar_state="auto",
-    menu_items={
-        "Report a bug": "https://github.com/linyqh/NarratoAI/issues",
-        'About': f"# Narrato:blue[AI] :sunglasses: 📽️ \n #### Version: v{config.project_version} \n "
-                 f"自动化影视解说视频详情请移步：https://github.com/linyqh/NarratoAI"
-    },
+    # menu_items={
+    #     "Report a bug": "https://github.com/linyqh/NarratoAI/issues",
+    #     'About': f"# Narrato:blue[AI] :sunglasses: 📽️ \n #### Version: v{config.project_version} \n "
+    #              f"自动化影视解说视频详情请移步：https://github.com/linyqh/NarratoAI"
+    # },
 )
 
 # 设置页面样式
@@ -118,22 +118,140 @@ def tr(key):
     return loc.get("Translation", {}).get(key, key)
 
 
+@st.cache_data
+def read_video_file(file_path):
+    """缓存视频文件读取，避免重复读取大文件"""
+    try:
+        with open(file_path, "rb") as f:
+            return f.read()
+    except Exception as e:
+        logger.error(f"读取视频文件失败: {e}")
+        return None
+
+
+@st.cache_data
+def read_subtitle_file(file_path):
+    """缓存字幕文件读取"""
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception as e:
+        logger.error(f"读取字幕文件失败: {e}")
+        return None
+
+
+def show_download_section(video_files, subtitle_file, tr):
+    """显示下载区域的独立函数"""
+    if not video_files:
+        return
+        
+    # 创建下载区域
+    has_subtitle = subtitle_file and os.path.exists(subtitle_file)
+    download_cols = st.columns(2) if has_subtitle else st.columns(1)
+    
+    # 下载视频文件
+    with download_cols[0]:
+        st.subheader("📹 " + tr("Download Video"))
+        
+        if len(video_files) == 1:
+            # 单个视频文件
+            video_file = video_files[0]
+            if not os.path.exists(video_file):
+                st.warning(f"视频文件不存在: {os.path.basename(video_file)}")
+                return
+                
+            try:
+                file_size = os.path.getsize(video_file) / (1024 * 1024)  # MB
+                st.markdown(f"**{os.path.basename(video_file)}** ({file_size:.1f} MB)")
+                
+                # 读取视频文件数据（使用缓存）
+                video_data = read_video_file(video_file)
+                if video_data is None:
+                    st.error(f"无法读取视频文件: {os.path.basename(video_file)}")
+                    return
+                
+                st.download_button(
+                    label=tr('Download Video'),
+                    data=video_data,
+                    file_name=os.path.basename(video_file),
+                    mime="video/mp4",
+                    key=f"download_video_single_{hash(video_file)}",
+                    use_container_width=True
+                )
+            except Exception as e:
+                logger.error(f"读取视频文件失败: {e}")
+                st.error(f"无法读取视频文件: {os.path.basename(video_file)}")
+        else:
+            # 多个视频文件
+            for i, video_file in enumerate(video_files):
+                if not os.path.exists(video_file):
+                    st.warning(f"视频文件不存在: {os.path.basename(video_file)}")
+                    continue
+                    
+                try:
+                    file_size = os.path.getsize(video_file) / (1024 * 1024)  # MB
+                    
+                    # 创建一个expander来组织多个文件
+                    with st.expander(f"视频 {i+1}: {os.path.basename(video_file)} ({file_size:.1f} MB)", expanded=True):
+                        # 读取视频文件数据（使用缓存）
+                        video_data = read_video_file(video_file)
+                        if video_data is None:
+                            st.error(f"无法读取视频文件: {os.path.basename(video_file)}")
+                            continue
+                        
+                        st.download_button(
+                            label=f"{tr('Download Video')} {i+1}",
+                            data=video_data,
+                            file_name=os.path.basename(video_file),
+                            mime="video/mp4",
+                            key=f"download_video_multi_{hash(video_file)}_{i}",
+                            use_container_width=True
+                        )
+                except Exception as e:
+                    logger.error(f"读取视频文件失败: {e}")
+                    st.error(f"无法读取视频文件: {os.path.basename(video_file)}")
+    
+    # 下载字幕文件
+    if has_subtitle:
+        with download_cols[1]:
+            st.subheader("📄 " + tr("Download Subtitle"))
+            try:
+                file_size = os.path.getsize(subtitle_file) / 1024  # KB
+                st.markdown(f"**{os.path.basename(subtitle_file)}** ({file_size:.1f} KB)")
+                
+                # 读取字幕文件数据（使用缓存）
+                subtitle_data = read_subtitle_file(subtitle_file)
+                if subtitle_data is None:
+                    st.error(f"无法读取字幕文件: {os.path.basename(subtitle_file)}")
+                    return
+                
+                st.download_button(
+                    label=tr("Download Subtitle"),
+                    data=subtitle_data.encode('utf-8'),
+                    file_name=os.path.basename(subtitle_file),
+                    mime="application/x-subrip",
+                    key=f"download_subtitle_{hash(subtitle_file)}",
+                    use_container_width=True
+                )
+                
+                # 显示字幕预览
+                with st.expander("📖 字幕预览", expanded=False):
+                    # 显示前几行字幕作为预览
+                    lines = subtitle_data.split('\n')
+                    preview_lines = lines[:min(20, len(lines))]
+                    st.text('\n'.join(preview_lines))
+                    if len(lines) > 20:
+                        st.text("...")
+                        
+            except Exception as e:
+                logger.error(f"读取字幕文件失败: {e}")
+                st.error(f"无法读取字幕文件: {os.path.basename(subtitle_file)}")
+
+
 def render_generate_button():
     """渲染生成按钮和处理逻辑"""
     if st.button(tr("Generate Video"), use_container_width=True, type="primary"):
         from app.services import task as tm
-
-        # 重置日志容器和记录
-        log_container = st.empty()
-        log_records = []
-
-        def log_received(msg):
-            with log_container:
-                log_records.append(msg)
-                st.code("\n".join(log_records))
-
-        from loguru import logger
-        logger.add(log_received)
 
         config.save_config()
         task_id = st.session_state.get('task_id')
@@ -149,6 +267,28 @@ def render_generate_button():
             return
 
         st.toast(tr("生成视频"))
+        
+        # 先创建下载区域占位符（在日志前面显示）
+        st.markdown("---")
+        st.subheader("📥 生成结果")
+        download_placeholder = st.empty()
+        with download_placeholder:
+            st.info("🔄 视频正在生成中，完成后下载按钮将在此显示...")
+        
+        # 然后创建日志显示区域（在下载区域后面）
+        st.markdown("---")
+        st.subheader("📋 处理日志")
+        log_container = st.empty()
+        log_records = []
+
+        def log_received(msg):
+            with log_container:
+                log_records.append(msg)
+                st.code("\n".join(log_records))
+
+        from loguru import logger
+        logger.add(log_received)
+        
         logger.info(tr("开始生成视频"))
 
         # 获取所有参数
@@ -175,8 +315,17 @@ def render_generate_button():
         )
 
         video_files = result.get("videos", [])
-        st.success(tr("视频生成完成"))
-
+        subtitle_file = result.get("subtitle", None)
+        
+        # 将结果存储在session_state中，避免刷新丢失
+        st.session_state['generated_videos'] = video_files
+        st.session_state['generated_subtitle'] = subtitle_file
+        
+        # 更新下载区域，替换占位符内容
+        with download_placeholder:
+            st.success(tr("视频生成完成"))
+            show_download_section(video_files, subtitle_file, tr)
+        
         try:
             if video_files:
                 player_cols = st.columns(len(video_files) * 2 + 1)
@@ -187,6 +336,14 @@ def render_generate_button():
 
         # file_utils.open_task_folder(config.root_dir, task_id)
         logger.info(tr("视频生成完成"))
+
+    # 如果有之前生成的结果，也显示下载区域
+    elif 'generated_videos' in st.session_state and st.session_state['generated_videos']:
+        show_download_section(
+            st.session_state['generated_videos'], 
+            st.session_state.get('generated_subtitle'), 
+            tr
+        )
 
 
 # 全局变量，记录是否已经打印过硬件加速信息
@@ -214,8 +371,27 @@ def main():
     except Exception as e:
         logger.warning(f"资源初始化时出现警告: {e}")
 
-    st.title(f"Narrato:blue[AI]:sunglasses: 📽️")
-    st.write(tr("Get Help"))
+    # 使用HTML和CSS来美化标题
+    st.markdown("""
+    <div style="text-align: left; margin-bottom: 1rem;">
+        <h1 style="font-size: 3rem; margin: 0; color: #1f77b4; font-weight: bold;">
+            🤖✂️ AI铰剪
+        </h1>
+        <p style="font-size: 0.9rem; margin: 0; color: #666; margin-top: -0.5rem;">
+            <em>AI铰剪 • Powered by NarratoAI</em> 📽️
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    # st.write(tr("Get Help"))
+
+    # 如果有之前生成的结果，显示清理按钮
+    if 'generated_videos' in st.session_state and st.session_state['generated_videos']:
+        col1, col2 = st.columns([3, 1])
+        with col2:
+            if st.button("🗑️ 清理下载区域", help="清除之前生成的下载文件列表"):
+                st.session_state.pop('generated_videos', None)
+                st.session_state.pop('generated_subtitle', None)
+                st.rerun()
 
     # 首先渲染不依赖PyTorch的UI部分
     # 渲染基础设置面板

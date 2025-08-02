@@ -6,7 +6,7 @@ import requests
 from dotenv import load_dotenv
 import os
 import streamlit as st
-
+from loguru import logger
 
 # 定义API基础URL
 base_url = 'https://api.minimaxi.com/v1'
@@ -22,8 +22,8 @@ def upload_audio_file(config, file_path, purpose):
     Returns:
         str: 上传文件的ID
     """
-    api_key = config.minimax.get("MINIMAX_GROUP_ID", "")
-    group_id = config.minimax.get("MINIMAX_KEY", "")
+    group_id = config.minimax.get("MINIMAX_GROUP_ID", "")
+    api_key = config.minimax.get("MINIMAX_KEY", "")
 
     url = f'{base_url}/files/upload?GroupId={group_id}'
     headers = {
@@ -41,9 +41,14 @@ def upload_audio_file(config, file_path, purpose):
         }
         response = requests.post(url, headers=headers, data=data, files=files)
         response.raise_for_status()  # 如果请求失败会抛出异常
-        file_id = response.json().get("file").get("file_id")
-        print(f"Uploaded {file_path} (purpose: {purpose}) with file_id: {file_id}")
+        try:
+            file_id = response.json().get("file").get("file_id")
+        except Exception as e:
+            logger.error(f"Error parsing response: {e}")
+            raise
+        logger.info(f"Uploaded {file_path} (purpose: {purpose}) with file_id: {file_id}")
         return file_id
+    
 
 def clone_voice(config, clone_file_id, voice_id):
     """
@@ -56,8 +61,8 @@ def clone_voice(config, clone_file_id, voice_id):
     Returns:
         dict: API响应结果
     """
-    api_key = config.minimax.get("MINIMAX_GROUP_ID", "")
-    group_id = config.minimax.get("MINIMAX_KEY", "")
+    group_id= config.minimax.get("MINIMAX_GROUP_ID", "")
+    api_key = config.minimax.get("MINIMAX_KEY", "")
     url = f'{base_url}/voice_clone?GroupId={group_id}'
     payload = json.dumps({
         "file_id": clone_file_id,
@@ -81,10 +86,10 @@ def clone_voice(config, clone_file_id, voice_id):
     response = requests.post(url, headers=headers, data=payload)
     response.raise_for_status()
     result = response.json()
-    print(f"Voice clone result: {result}")
+    logger.info(f"Voice clone result: {result}")
     return result
 
-def clone_voice(config: dict, file_path: str, voice_id: str):
+def clone_voice_minimax(config: dict, file_path: str, voice_id: str):
     clone_audio_file_id = upload_audio_file(config, file_path, 'voice_clone')
     return clone_voice(config, clone_audio_file_id, voice_id)
 

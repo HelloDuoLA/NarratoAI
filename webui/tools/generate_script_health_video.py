@@ -10,6 +10,7 @@ from loguru import logger
 from datetime import datetime
 import subprocess
 import sys
+from json_repair import repair_json
 
 from pathlib import Path
 import re
@@ -80,43 +81,6 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
         s, ms = divmod(ms,    1_000)
         return f'{h:02d}:{m:02d}:{s:02d}.{int(ms):03d}'
 
-    def middle_timestamps(sub_list):
-        # 取中间时间值(暂时不需要, 使用calculate_extraction_time)
-        mids = []
-        for item in sub_list:
-            start_str, end_str = item['timestamp'].split(' --> ')
-            mid_ms = (to_ms(start_str) + to_ms(end_str)) // 2
-            mids.append(to_hmsf(mid_ms))
-        return mids
-    
-    def calculate_extraction_times(start_seconds, end_seconds, num_frames=1):
-        """
-        计算一个字幕片段内要提取的关键帧时间点
-        
-        Args:
-            start_seconds: 开始时间（秒）
-            end_seconds: 结束时间（秒）
-            num_frames: 要提取的帧数量，默认1帧（中间时刻）
-        Returns:
-            List[str]: 时间点列表，格式为 "HH:MM:SS.mmm"
-        """
-        duration = end_seconds - start_seconds
-        
-        if num_frames == 1:
-            # 单帧：使用中间时刻
-            mid_time = start_seconds + duration / 2
-            return [utils.format_time(mid_time).replace(',', '.')]
-        else:
-            # 多帧：均匀分布在时间段内
-            times = []
-            for i in range(num_frames):
-                if num_frames == 1:
-                    time_offset = duration / 2
-                else:
-                    time_offset = (i / (num_frames - 1)) * duration
-                frame_time = start_seconds + time_offset
-                times.append(utils.format_time(frame_time).replace(',', '.'))
-            return times
 
     try:
         with st.spinner("正在生成脚本..."):
@@ -170,7 +134,6 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                         "start_seconds": start_seconds,
                         "end_seconds": end_seconds,
                         "duration": duration,
-                        "extraction_times": calculate_extraction_times(start_seconds, end_seconds, num_frames=1),  # 当前默认提取1帧
                         "keyframe_paths": [],  # 存储对应的关键帧路径列表
                         "scene_description": None,  # 稍后通过多模态大模型填充
                     }
@@ -205,8 +168,20 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                     with open(subtitle_keyframe_match_file, 'r', encoding='utf-8') as f:
                         cached_data = json.load(f)
                     
-                    # 验证缓存数据的完整性
-                    if len(cached_data) == len(subtitle_keyframe_data):
+                    # 获取当前的采样参数
+                    current_second_per_frame = config.frames.get('second_per_frame', None)
+                    current_max_frames = 10
+                    
+                    # 检查缓存是否包含采样参数信息（用于验证缓存是否匹配当前参数）
+                    cached_sampling_params = cached_data[0].get('sampling_params', {}) if cached_data else {}
+                    cached_second_per_frame = cached_sampling_params.get('second_per_frame', None)
+                    cached_max_frames = cached_sampling_params.get('max_frames', -1)
+                    
+                    # 验证缓存数据的完整性和采样参数是否匹配
+                    params_match = (cached_second_per_frame == current_second_per_frame and 
+                                   cached_max_frames == current_max_frames)
+                    
+                    if len(cached_data) == len(subtitle_keyframe_data) and params_match:
                         # 更新 subtitle_keyframe_data 使用缓存的关键帧路径
                         for i, cached_item in enumerate(cached_data):
                             if i < len(subtitle_keyframe_data):
@@ -222,7 +197,10 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                         # 标记为使用缓存
                         using_cached_data = True
                     else:
-                        logger.warning(f"缓存数据长度不匹配，重新提取关键帧")
+                        if not params_match:
+                            logger.warning(f"缓存采样参数不匹配，当前参数: interval={current_second_per_frame}, max_frames={current_max_frames}, 缓存参数: interval={cached_second_per_frame}, max_frames={cached_max_frames}")
+                        else:
+                            logger.warning(f"缓存数据长度不匹配，重新提取关键帧")
                         using_cached_data = False
                 except Exception as cache_error:
                     logger.warning(f"读取缓存匹配数据失败: {cache_error}，重新提取关键帧")
@@ -243,22 +221,11 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                     # 提前保存字幕-关键帧匹配数据，供独立工具使用
                     temp_match_file = os.path.join(video_keyframes_dir, "subtitle_keyframe_match_input.json")
                     
-                    # 预先生成所有关键帧文件路径（这样就不需要后续读取更新文件）
-                    update_progress(15, "正在预处理关键帧文件路径...")
-                    total_expected = 0
+                    # 预先生成字幕-关键帧匹配数据，供独立工具使用
+                    update_progress(15, "正在准备关键帧提取数据...")
                     
-                    for i, data_item in enumerate(subtitle_keyframe_data):
-                        for j, extraction_time in enumerate(data_item['extraction_times']):
-                            # 计算关键帧文件名（与独立工具保持一致）
-                            time_str = extraction_time.replace(':', '').replace('.', '')
-                            keyframe_filename = f"segment_{i + 1}_keyframe_{time_str}.jpg"
-                            keyframe_path = os.path.join(video_keyframes_dir, keyframe_filename)
-                            
-                            # 预先将路径添加到数据结构中
-                            data_item['keyframe_paths'].append(keyframe_path)
-                            total_expected += 1
-                    
-                    logger.info(f"预处理完成，预期提取 {total_expected} 个关键帧")
+                    # 简化处理：让独立工具负责所有采样逻辑和关键帧路径生成
+                    # 主脚本只需要传递字幕片段的基本信息和采样参数
                     
                     with open(temp_match_file, 'w', encoding='utf-8') as f:
                         # 创建一个可序列化的版本（用于独立工具）
@@ -268,9 +235,10 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                                 "index": item["index"],
                                 "subtitle_text": item["subtitle_text"],
                                 "timestamp": item["timestamp"],
+                                "start_seconds": item["start_seconds"],
+                                "end_seconds": item["end_seconds"],
                                 "duration": item["duration"],
-                                "extraction_times": item["extraction_times"],
-                                "keyframe_paths": [],  # 独立工具会填充这个，但我们已经在主结构中预设了
+                                "keyframe_paths": [],  # 空列表，独立工具会生成实际文件
                                 "has_keyframes": False
                             }
                             serializable_data.append(serializable_item)
@@ -279,12 +247,23 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                     logger.info(f"字幕-关键帧匹配数据已保存到: {temp_match_file}")
 
                     # 使用独立的关键帧提取工具
-                    update_progress(16, f"正在启动独立关键帧提取工具（共{total_expected}个关键帧）...")
+                    update_progress(16, "正在启动独立关键帧提取工具...")
                     
                     # 构建命令行参数
+                    # !待验证
                     extract_tool_path = os.path.join(project_root, "tools", "extract_keyframes_simple.py")
                     if not os.path.exists(extract_tool_path):
                         extract_tool_path = os.path.join(os.path.dirname(__file__), "..", "..", "tools", "extract_keyframes_simple.py")
+                    
+                    # 获取配置参数
+                    second_per_frame = config.frames.get('second_per_frame', None)
+                    max_frames = 10  # 固定最大帧数为10
+                    
+                    # 记录采样参数
+                    if second_per_frame is not None:
+                        logger.info(f"使用采样参数: 间隔 {second_per_frame} 秒提取一帧，最大帧数 {max_frames}")
+                    else:
+                        logger.info(f"使用默认采样: 每个片段提取中间帧，最大帧数 {max_frames}")
                     
                     cmd = [
                         sys.executable,
@@ -295,6 +274,11 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                         "--max_workers", "20",
                         "--log_level", "INFO"
                     ]
+                    
+                    # 添加新的参数
+                    if second_per_frame is not None:
+                        cmd.extend(["--interval_seconds", str(second_per_frame)])
+                    cmd.extend(["--max_frames", str(max_frames)])
                     
                     logger.info(f"执行命令: {' '.join(cmd)}")
                     
@@ -343,12 +327,11 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                                 current_count = len(keyframe_files)
                                 
                                 if current_count != last_count:
-                                    # 计算进度百分比 (17%-20%的进度范围)
-                                    progress_percent = 17 + (current_count / total_expected) * 3
-                                    update_progress(progress_percent, f"已提取 {current_count}/{total_expected} 个关键帧")
+                                    # 简化进度显示，不计算百分比
+                                    update_progress(17 + min(current_count * 0.1, 3), f"已提取 {current_count} 个关键帧")
                                     last_count = current_count
                                     
-                                    logger.debug(f"当前已提取 {current_count}/{total_expected} 个关键帧")
+                                    logger.debug(f"当前已提取 {current_count} 个关键帧")
                         
                         except Exception as e:
                             logger.warning(f"统计关键帧文件失败: {e}")
@@ -366,22 +349,81 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                     
                     logger.info("关键帧提取进程完成")
                     
-                    # 最终统计：检查哪些文件实际生成了
-                    successful_extractions = 0
-                    failed_extractions = 0
-                    
-                    for data_item in subtitle_keyframe_data:
-                        # 检查预定义路径中哪些文件实际存在
-                        existing_paths = []
-                        for keyframe_path in data_item['keyframe_paths']:
-                            if os.path.exists(keyframe_path):
-                                existing_paths.append(keyframe_path)
-                                successful_extractions += 1
-                            else:
-                                failed_extractions += 1
+                    # 通过文件名模式匹配重建关键帧数据结构
+                    def match_keyframes_by_filename():
+                        """
+                        通过文件名模式匹配关键帧文件到对应的字幕片段
+                        文件名格式: segment_{segment_num}_keyframe_{frame_num}_{timestamp}.jpg
+                        """
+                        import re
+                        import glob
                         
-                        # 更新为实际存在的文件路径
-                        data_item['keyframe_paths'] = existing_paths
+                        # 获取所有关键帧文件
+                        keyframe_pattern = os.path.join(video_keyframes_dir, "segment_*_keyframe_*.jpg")
+                        keyframe_files = glob.glob(keyframe_pattern)
+                        
+                        logger.info(f"找到 {len(keyframe_files)} 个关键帧文件")
+                        
+                        # 先清空所有片段的关键帧路径
+                        for data_item in subtitle_keyframe_data:
+                            data_item['keyframe_paths'] = []
+                        
+                        # 解析文件名模式: segment_{segment_num}_keyframe_{frame_num}_{timestamp}.jpg
+                        filename_pattern = r'segment_(\d+)_keyframe_(\d+)_(\d+)\.jpg'
+                        
+                        # 按片段分组关键帧文件
+                        segment_keyframes = {}
+                        
+                        for keyframe_file in keyframe_files:
+                            filename = os.path.basename(keyframe_file)
+                            match = re.match(filename_pattern, filename)
+                            
+                            if match:
+                                segment_num = int(match.group(1))  # 片段号（从1开始）
+                                frame_num = int(match.group(2))    # 帧号（从1开始）
+                                timestamp_str = match.group(3)     # 时间戳字符串
+                                
+                                # 转换为0索引的片段索引
+                                segment_index = segment_num - 1
+                                
+                                if segment_index not in segment_keyframes:
+                                    segment_keyframes[segment_index] = []
+                                
+                                segment_keyframes[segment_index].append({
+                                    'path': keyframe_file,
+                                    'frame_num': frame_num,
+                                    'timestamp_str': timestamp_str,
+                                    'filename': filename
+                                })
+                                
+                                logger.debug(f"匹配文件: {filename} -> 片段{segment_index+1}, 帧{frame_num}")
+                            else:
+                                logger.warning(f"无法解析关键帧文件名: {filename}")
+                        
+                        # 为每个片段按时间戳排序关键帧并分配到数据结构
+                        successful_extractions = 0
+                        for segment_index, keyframes in segment_keyframes.items():
+                            if segment_index < len(subtitle_keyframe_data):
+                                # 按时间戳字符串排序（数字排序）
+                                keyframes.sort(key=lambda x: int(x['timestamp_str']))
+                                
+                                # 提取排序后的文件路径
+                                keyframe_paths = [kf['path'] for kf in keyframes]
+                                subtitle_keyframe_data[segment_index]['keyframe_paths'] = keyframe_paths
+                                
+                                successful_extractions += len(keyframe_paths)
+                                
+                                logger.info(f"片段 {segment_index+1}: 分配 {len(keyframe_paths)} 个关键帧")
+                                for kf in keyframes:
+                                    logger.debug(f"  -> {kf['filename']}")
+                            else:
+                                logger.warning(f"片段索引 {segment_index} 超出范围")
+                        
+                        return successful_extractions, len(keyframe_files)
+                    
+                    # 执行关键帧匹配
+                    successful_extractions, total_keyframe_files = match_keyframes_by_filename()
+                    failed_extractions = max(0, total_keyframe_files - successful_extractions)
                     
                     if successful_extractions == 0:
                         # 检查目录中是否有其他文件
@@ -389,15 +431,15 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                         logger.error(f"关键帧目录内容: {all_files}")
                         raise Exception("未提取到任何关键帧文件，请检查视频文件格式")
 
-                    update_progress(20, f"关键帧提取完成，成功 {successful_extractions}/{total_expected} 帧")
+                    update_progress(20, f"关键帧提取完成，成功匹配 {successful_extractions} 个关键帧")
                     
                     if failed_extractions > 0:
-                        st.warning(f"⚠️ 有 {failed_extractions} 个关键帧提取失败，将继续处理成功的 {successful_extractions} 个")
+                        st.warning(f"⚠️ 有 {failed_extractions} 个关键帧文件无法匹配到字幕片段")
                     else:
-                        st.success(f"✅ 成功提取 {successful_extractions} 个关键帧")
+                        st.success(f"✅ 成功提取并匹配 {successful_extractions} 个关键帧")
 
                 except Exception as e:
-                    # 如果提取失败，清理预设的路径（因为文件可能没有实际生成）
+                    # 如果提取失败，清理关键帧路径
                     for data_item in subtitle_keyframe_data:
                         data_item['keyframe_paths'] = []
                     
@@ -423,7 +465,6 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
             total_keyframes = sum(len(item['keyframe_paths']) for item in subtitle_keyframe_data)
             
             logger.info(f"数据验证完成，共 {len(subtitle_keyframe_data)} 个字幕片段")
-            logger.info(f"其中 {len(segments_with_keyframes)} 个片段有关键帧（共 {total_keyframes} 帧），{len(segments_without_keyframes)} 个片段无关键帧")
             
             # 对没有关键帧的片段发出警告
             if segments_without_keyframes:
@@ -445,15 +486,23 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                 with open(subtitle_keyframe_match_file, 'w', encoding='utf-8') as f:
                     # 创建一个可序列化的版本
                     serializable_data = []
+                    # 获取当前采样参数
+                    current_second_per_frame = config.frames.get('second_per_frame', None)
+                    current_max_frames = 10
+                    
                     for item in subtitle_keyframe_data:
                         serializable_item = {
                             "index": item["index"],
                             "subtitle_text": item["subtitle_text"],
                             "timestamp": item["timestamp"],  # 原始SRT时间戳格式
                             "duration": item["duration"],
-                            "extraction_times": item["extraction_times"],
                             "keyframe_paths": item["keyframe_paths"],
-                            "has_keyframes": len(item["keyframe_paths"]) > 0
+                            "has_keyframes": len(item["keyframe_paths"]) > 0,
+                            # 添加采样参数信息用于缓存验证
+                            "sampling_params": {
+                                "second_per_frame": current_second_per_frame,
+                                "max_frames": current_max_frames
+                            }
                         }
                         serializable_data.append(serializable_item)
                     json.dump(serializable_data, f, ensure_ascii=False, indent=2)
@@ -562,9 +611,9 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                                                     data_item['plot_analysis'] = analysis_data.get('plot_analysis', '')
                                                     data_item['content_summary'] = analysis_data.get('content_summary', '')
                                                     
-                                                    logger.info(f"字幕片段 {i+1} 画面理解完成")
+                                                    # logger.info(f"字幕片段 {i+1} 画面理解完成")
                                                 else:
-                                                    logger.error(f"字幕片段 {i+1} JSON解析失败")
+                                                    # logger.error(f"字幕片段 {i+1} JSON解析失败")
                                                     # 使用原始响应作为描述
                                                     data_item['scene_description'] = response_text[:200] + "..."
                                                     data_item['content_summary'] = f"基于字幕：{subtitle_text}"
@@ -579,7 +628,7 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                                             data_item['content_summary'] = f"基于字幕：{subtitle_text}"
                                             
                                     except Exception as segment_error:
-                                        logger.error(f"字幕片段 {i+1} 分析出错: {segment_error}")
+                                        logger.error(f"字幕片段 {i+1} 分析出错")
                                         data_item['content_summary'] = f"基于字幕：{subtitle_text}"
                                 else:
                                     # 没有关键帧：基于字幕内容进行文本分析（使用视觉分析器的文本处理能力）
@@ -703,6 +752,7 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                     combined_content.append(content_block)
                 
                 # 构建主题提取prompt
+                # !markdown格式是否有必要
                 content_summary = "\n".join([
                     f"时间段: {item['time']}\n字幕: {item['subtitle']}\n画面理解: {item['scene_description']}\n内容总结: {item['content_summary']}\n---"
                     for item in combined_content
@@ -735,7 +785,6 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                 """
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-                # TODO:调用可能回存在返回值格式不太对的问题，因为是层层修改的。
                 theme_response = loop.run_until_complete(
                     themes_analyzer.analyze_themes(
                         theme_extraction_prompt
@@ -957,24 +1006,36 @@ def parse_and_fix_json(json_string):
     if not json_string or not json_string.strip():
         logger.error("JSON字符串为空")
         return None
-
+    
+    try:
+        result = repair_json(json_string, return_objects=True)
+        if result == "":
+            logger.error("调用repair_json库解析失败")
+        else:
+            return result
+    except json.JSONDecodeError as e:
+        logger.warning(f"调用repair_json库解析失败: {e}")
+    
     # 清理字符串
     json_string = json_string.strip()
-
+    
     # 尝试直接解析
     try:
         return json.loads(json_string)
     except json.JSONDecodeError as e:
         logger.warning(f"直接JSON解析失败: {e}")
-
+    
     # 尝试修复双大括号问题（LLM生成的常见问题）
     try:
         # 将双大括号替换为单大括号
         fixed_braces = json_string.replace('{{', '{').replace('}}', '}')
-        logger.info("修复双大括号格式, json解析成功")
+        logger.info("修复双大括号格式")
         return json.loads(fixed_braces)
-    except json.JSONDecodeError:
-        pass
+    except json.JSONDecodeError as e:
+        logger.debug(f"修复双大括号格式失败: {e}")
+        # pass
+    
+   
 
     # 尝试提取JSON部分
     try:
@@ -984,8 +1045,8 @@ def parse_and_fix_json(json_string):
             json_content = json_match.group(1).strip()
             logger.info("从代码块中提取JSON内容")
             return json.loads(json_content)
-    except json.JSONDecodeError:
-        pass
+    except json.JSONDecodeError as e:
+        logger.debug(f"从代码块提取JSON失败: {e}")
 
     # 尝试查找大括号包围的内容
     try:
@@ -1022,7 +1083,13 @@ def parse_and_fix_json(json_string):
 
         # 5. 修复单引号
         fixed_json = re.sub(r"'([^']*)':", r'"\1":', fixed_json)
-
+        
+        # 5.1 把所有的单引号改成双引号
+        fixed_json = fixed_json.replace("'", '"')
+        
+        # 5.2 把中文双引号改成转义英文双引号
+        fixed_json = fixed_json.replace('“', '\\"').replace('”', '\\"')
+        
         # 6. 修复没有引号的属性名
         fixed_json = re.sub(r'(\w+)(\s*):', r'"\1"\2:', fixed_json)
 
@@ -1036,5 +1103,5 @@ def parse_and_fix_json(json_string):
         pass
 
     # 如果所有方法都失败，返回None
-    logger.error(f"所有JSON解析方法都失败，原始内容: {json_string[:200]}...")
+    logger.error(f"所有JSON解析方法都失败，原始内容: {json_string}...")
     return None

@@ -141,23 +141,23 @@ class ErnieAIStudioVisionProvider(VisionModelProvider):
                 }
             })
             
-            messages = [{"role": "user", "content": content_parts}]
+        messages = [{"role": "user", "content": content_parts}]
             
-            # 发送API请求
-            response = await asyncio.to_thread(
-                self.client.chat.completions.create,
-                model=self.model_name,
-                messages=messages,
-                max_tokens=8192
-            )
-            
-            if response.choices and len(response.choices) > 0:
-                content = response.choices[0].message.content
-                logger.debug(f"ERNIE AI Studio批量分析成功，图片数量: {len(images)}")
-                return content
-            else:
-                raise APICallError("ERNIE AI Studio API返回空响应")
-    
+        # 发送API请求
+        response = await asyncio.to_thread(
+            self.client.chat.completions.create,
+            model=self.model_name,
+            messages=messages,
+            max_tokens=8192
+        )
+        
+        if response.choices and len(response.choices) > 0:
+            content = response.choices[0].message.content
+            logger.debug(f"ERNIE AI Studio批量分析成功，图片数量: {len(images)}")
+            return content
+        else:
+            raise APICallError("ERNIE AI Studio API返回空响应")
+
         
         # 过滤掉None值并返回
         return [result for result in results if result is not None]
@@ -283,8 +283,8 @@ class ErnieAIStudioTextProvider(TextModelProvider):
             "temperature": temperature
         }
         
-        if max_tokens:
-            request_params["max_tokens"] = max_tokens
+        # if max_tokens:
+        #     request_params["max_tokens"] = max_tokens
         
         # 处理JSON格式输出 - ERNIE通常不直接支持response_format
         if response_format == "json":
@@ -294,6 +294,7 @@ class ErnieAIStudioTextProvider(TextModelProvider):
             # 发送API请求
             response = await asyncio.to_thread(
                 self.client.chat.completions.create,
+                max_tokens=12000,
                 **request_params
             )
             

@@ -228,9 +228,9 @@ def perform_speech_recognition(video_path: str, video_name: str, tr, status_plac
         
         # 预定义文件路径
         audio_path = os.path.join(work_dir, f"audio.wav")
-        vocals_path = os.path.join(work_dir, f"{video_name}_vocals.wav")
-        accompaniment_path = os.path.join(work_dir, f"{video_name}_accompaniment.wav")
-        aliyun_subtitle_path = os.path.join(work_dir, f"{video_name}_aliyun_subtitle.json")
+        vocals_path = os.path.join(work_dir, f"vocals.wav")
+        accompaniment_path = os.path.join(work_dir, f"accompaniment.wav")
+        aliyun_subtitle_path = os.path.join(work_dir, f"aliyun_subtitle.json")
         llm_srt_path = os.path.join(work_dir, f"{video_name}.srt")
         
         # 检查是否已有SRT字幕文件
@@ -429,11 +429,13 @@ def separate_audio_sources(audio_path: str, video_name: str, work_dir: str, stat
     # Spleeter输出目录
     output_dir = os.path.join(work_dir, "separated")
     os.makedirs(output_dir, exist_ok=True)
-    
+    env = os.environ.copy()
+    env['CUDA_VISIBLE_DEVICES'] = '0'
     # 使用Spleeter进行音源分离
-    cmd = spleeter_cmd_prefix + [
+    cmd = [
+        "conda", "run", "-n", "spleeter",
         "spleeter", "separate",
-        "-p", "spleeter:2stems",  # 使用2stems模型分离人声和背景
+        "-p", "spleeter:2stems",
         "-d", "5000",
         "-o", output_dir,
         audio_path
@@ -441,10 +443,18 @@ def separate_audio_sources(audio_path: str, video_name: str, work_dir: str, stat
     
     logger.info(f"执行Spleeter命令: {' '.join(cmd)}")
     
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)  # 10分钟超时
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
+                              text=True, bufsize=1, universal_newlines=True, env=env)
+        # 实时读取和打印输出
+    for line in process.stdout:
+        print(line.rstrip())
     
-    if result.returncode != 0:
-        logger.error(f"Spleeter分离失败: {result.stderr}")
+    # 等待进程完成
+    process.wait()
+    if process.returncode == 0:
+        print("Spleeter separation completed successfully!")
+    else:
+        print(f"Spleeter separation failed with return code: {process.returncode}")
         # 如果Spleeter失败，直接使用原音频作为人声
         return audio_path, None
     
@@ -458,7 +468,7 @@ def separate_audio_sources(audio_path: str, video_name: str, work_dir: str, stat
     # 重命名文件以包含视频名前缀
     final_vocals_path = os.path.join(work_dir, f"{video_name}_vocals.wav")
     final_accompaniment_path = os.path.join(work_dir, f"{video_name}_accompaniment.wav")
-    
+
     if os.path.exists(vocals_path):
         os.rename(vocals_path, final_vocals_path)
         vocal_size = os.path.getsize(final_vocals_path) / (1024 * 1024)

@@ -24,6 +24,52 @@ sys.path.insert(0, str(project_root))
 from app.utils import utils, video_processor
 
 
+def calculate_extraction_times_with_sampling(start_seconds: float, end_seconds: float, 
+                                            interval_seconds: float = None, 
+                                            max_frames: int = -1) -> List[str]:
+    """
+    根据间隔和最大帧数计算提取时间点
+    
+    Args:
+        start_seconds: 开始时间（秒）
+        end_seconds: 结束时间（秒）
+        interval_seconds: 间隔秒数，如果为None则只提取中间帧
+        max_frames: 最大帧数，-1表示不限制
+        
+    Returns:
+        List[str]: 时间点列表，格式如 "00:01:30.500"
+    """
+    duration = end_seconds - start_seconds
+    
+    if interval_seconds is None:
+        # 默认行为：只提取中间一帧
+        mid_time = start_seconds + duration / 2
+        return [utils.seconds_to_time(mid_time)]
+    
+    # 按间隔计算时间点
+    time_points = []
+    current_time = start_seconds
+    
+    while current_time <= end_seconds:
+        time_points.append(current_time)
+        current_time += interval_seconds
+    
+    # 如果没有时间点或最后一个时间点太接近结束时间，确保至少有一帧
+    if not time_points:
+        time_points = [start_seconds + duration / 2]
+    elif len(time_points) == 1 and time_points[0] > end_seconds - 0.1:
+        time_points = [start_seconds + duration / 2]
+    
+    # 应用最大帧数限制
+    if max_frames > 0 and len(time_points) > max_frames:
+        # 均匀采样到最大帧数
+        indices = [int(i * (len(time_points) - 1) / (max_frames - 1)) for i in range(max_frames)]
+        time_points = [time_points[i] for i in indices]
+    
+    # 转换为时间字符串格式
+    return [utils.seconds_to_time(t) for t in time_points]
+
+
 def extract_single_keyframe_worker(task_data: Dict) -> bool:
     """
     多进程工作函数：提取单个关键帧
@@ -64,7 +110,8 @@ def extract_single_keyframe_worker(task_data: Dict) -> bool:
 
 
 def extract_keyframes_multiprocess(video_path: str, subtitle_keyframe_data: List[Dict], 
-                                 output_dir: str, max_workers: int = 4) -> Dict:
+                                 output_dir: str, max_workers: int = 4,
+                                 interval_seconds: float = None, max_frames: int = -1) -> Dict:
     """
     使用多进程提取所有关键帧
     
@@ -73,6 +120,8 @@ def extract_keyframes_multiprocess(video_path: str, subtitle_keyframe_data: List
         subtitle_keyframe_data: 字幕-关键帧匹配数据
         output_dir: 输出目录
         max_workers: 最大工作进程数
+        interval_seconds: 间隔秒数
+        max_frames: 每个片段最大帧数
         
     Returns:
         Dict: 提取结果统计
@@ -81,10 +130,33 @@ def extract_keyframes_multiprocess(video_path: str, subtitle_keyframe_data: List
     tasks = []
     
     for i, data_item in enumerate(subtitle_keyframe_data):
-        for j, extraction_time in enumerate(data_item['extraction_times']):
+        # 重新计算提取时间点（如果需要）
+        if interval_seconds is not None or max_frames != -1:
+            # 从时间戳中解析开始和结束时间
+            timestamp = data_item.get('timestamp', '00:00:00,000 --> 00:00:01,000')
+            duration = data_item.get('duration', 1.0)
+            
+            if ' --> ' in timestamp:
+                start_time_str, end_time_str = timestamp.split(' --> ')
+                start_seconds = utils.time_to_seconds(start_time_str.replace('.', ','))
+                end_seconds = utils.time_to_seconds(end_time_str.replace('.', ','))
+            else:
+                # 如果没有时间戳信息，使用duration
+                start_seconds = i * duration  # 假设连续的片段
+                end_seconds = start_seconds + duration
+            
+            # 使用新的采样策略
+            extraction_times = calculate_extraction_times_with_sampling(
+                start_seconds, end_seconds, interval_seconds, max_frames
+            )
+        else:
+            # 使用原始数据
+            extraction_times = data_item['extraction_times']
+        
+        for j, extraction_time in enumerate(extraction_times):
             # 计算关键帧文件名
             time_str = extraction_time.replace(':', '').replace('.', '')
-            keyframe_filename = f"segment_{i + 1}_keyframe_{time_str}.jpg"
+            keyframe_filename = f"segment_{i + 1}_keyframe_{j+1}_{time_str}.jpg"
             keyframe_path = os.path.join(output_dir, keyframe_filename)
             
             # 将时间字符串转换为秒数
@@ -100,6 +172,11 @@ def extract_keyframes_multiprocess(video_path: str, subtitle_keyframe_data: List
     
     total_tasks = len(tasks)
     logger.info(f"准备提取 {total_tasks} 个关键帧，使用 {max_workers} 个进程")
+    
+    if interval_seconds is not None:
+        logger.info(f"采样间隔: {interval_seconds}秒")
+    if max_frames > 0:
+        logger.info(f"每片段最大帧数: {max_frames}")
     
     # 使用多进程池处理任务
     successful_count = 0
@@ -128,23 +205,74 @@ def extract_keyframes_multiprocess(video_path: str, subtitle_keyframe_data: List
 
 
 def extract_keyframes_sequential(video_path: str, subtitle_keyframe_data: List[Dict], 
-                               output_dir: str) -> Dict:
+                               output_dir: str, interval_seconds: float = None, 
+                               max_frames: int = -1) -> Dict:
     """
     顺序提取关键帧（用于调试或小规模任务）
     """
     processor = video_processor.VideoProcessor(video_path)
-    total_tasks = sum(len(item['extraction_times']) for item in subtitle_keyframe_data)
+    
+    # 计算总任务数
+    total_tasks = 0
+    for data_item in subtitle_keyframe_data:
+        if interval_seconds is not None or max_frames != -1:
+            # 从时间戳中解析开始和结束时间
+            timestamp = data_item.get('timestamp', '00:00:00,000 --> 00:00:01,000')
+            duration = data_item.get('duration', 1.0)
+            
+            if ' --> ' in timestamp:
+                start_time_str, end_time_str = timestamp.split(' --> ')
+                start_seconds = utils.time_to_seconds(start_time_str.replace('.', ','))
+                end_seconds = utils.time_to_seconds(end_time_str.replace('.', ','))
+            else:
+                # 如果没有时间戳信息，使用duration
+                start_seconds = 0
+                end_seconds = duration
+            
+            extraction_times = calculate_extraction_times_with_sampling(
+                start_seconds, end_seconds, interval_seconds, max_frames
+            )
+            total_tasks += len(extraction_times)
+        else:
+            total_tasks += len(data_item['extraction_times'])
+    
     successful_count = 0
     failed_count = 0
     
     logger.info(f"准备提取 {total_tasks} 个关键帧（顺序处理）")
     
+    if interval_seconds is not None:
+        logger.info(f"采样间隔: {interval_seconds}秒")
+    if max_frames > 0:
+        logger.info(f"每片段最大帧数: {max_frames}")
+    
     try:
         for i, data_item in enumerate(subtitle_keyframe_data):
-            for j, extraction_time in enumerate(data_item['extraction_times']):
+            # 重新计算提取时间点（如果需要）
+            if interval_seconds is not None or max_frames != -1:
+                # 从时间戳中解析开始和结束时间
+                timestamp = data_item.get('timestamp', '00:00:00,000 --> 00:00:01,000')
+                duration = data_item.get('duration', 1.0)
+                
+                if ' --> ' in timestamp:
+                    start_time_str, end_time_str = timestamp.split(' --> ')
+                    start_seconds = utils.time_to_seconds(start_time_str.replace('.', ','))
+                    end_seconds = utils.time_to_seconds(end_time_str.replace('.', ','))
+                else:
+                    # 如果没有时间戳信息，使用duration
+                    start_seconds = i * duration  # 假设连续的片段
+                    end_seconds = start_seconds + duration
+                
+                extraction_times = calculate_extraction_times_with_sampling(
+                    start_seconds, end_seconds, interval_seconds, max_frames
+                )
+            else:
+                extraction_times = data_item['extraction_times']
+            
+            for j, extraction_time in enumerate(extraction_times):
                 # 计算关键帧文件名
                 time_str = extraction_time.replace(':', '').replace('.', '')
-                keyframe_filename = f"segment_{i + 1}_keyframe_{time_str}.jpg"
+                keyframe_filename = f"segment_{i + 1}_keyframe_{j+1}_{time_str}.jpg"
                 keyframe_path = os.path.join(output_dir, keyframe_filename)
                 
                 # 将时间字符串转换为秒数
@@ -186,6 +314,12 @@ def main():
     parser.add_argument('--sequential', action='store_true', help='使用顺序处理而不是多进程')
     parser.add_argument('--log_level', default='INFO', help='日志级别')
     
+    # 新增参数
+    parser.add_argument('--interval_seconds', type=float, default=None, 
+                       help='间隔多少秒提取一帧，如果不指定则只提取中间帧')
+    parser.add_argument('--max_frames', type=int, default=-1, 
+                       help='每个片段最多提取多少帧，-1表示不限制。如果间隔采样超过此数量，会均匀采样到指定帧数')
+    
     args = parser.parse_args()
     
     # 配置日志
@@ -203,6 +337,15 @@ def main():
     
     if not os.path.exists(args.subtitle_keyframe_match):
         logger.error(f"字幕匹配文件不存在: {args.subtitle_keyframe_match}")
+        sys.exit(1)
+    
+    # 参数验证
+    if args.interval_seconds is not None and args.interval_seconds <= 0:
+        logger.error("间隔秒数必须大于0")
+        sys.exit(1)
+    
+    if args.max_frames < -1 or args.max_frames == 0:
+        logger.error("最大帧数必须为-1（不限制）或大于0的整数")
         sys.exit(1)
     
     # 确保输出目录存在
@@ -224,7 +367,9 @@ def main():
             result = extract_keyframes_sequential(
                 args.video_path, 
                 subtitle_keyframe_data, 
-                args.output_dir
+                args.output_dir,
+                args.interval_seconds,
+                args.max_frames
             )
         else:
             logger.info(f"使用多进程处理模式，进程数: {args.max_workers}")
@@ -232,7 +377,9 @@ def main():
                 args.video_path, 
                 subtitle_keyframe_data, 
                 args.output_dir, 
-                args.max_workers
+                args.max_workers,
+                args.interval_seconds,
+                args.max_frames
             )
         
         logger.info(f"关键帧提取完成")

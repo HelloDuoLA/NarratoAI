@@ -1,1 +1,4 @@
 现在你要重新修改后续的代码，构造完按字幕行数为单位的数据结构之后呢，我们要进行的是将每一个数据结构输入到大模型中，让大模型完成画面理解与剧情梳理，并保存回原数据结构中。然后将更新后的数据结构的字幕、与画面理解总和到一起，再传送给大模型进行主题提取，目前先对第一个主题进行后续的操作，后续就是把主题和字幕、与画面理解输入到大模型中，让大模型给出一个剪辑的脚本，视频内容要贴合主题。应该可以参考借鉴webui/tools/generate_script_docu.py
+
+
+就是在bash 环境里用 conda run -n spleeter spleeter separate -p spleeter:2stems -d 5000 -o storage/temp/TTS/shantou_0801_processing/separated storage/uploads/shantou_0801.mp4 效果和在sleeter 中运行的差不多，但是在python 中用 subprocess.run进行调用 conda run -n spleeter spleeter separate -p spleeter:2stems -d 5000 -o storage/temp/TTS/shantou_0801_processing/separated storage/uploads/shantou_0801.mp4 就无法正确分离背景音乐和人声，但是它还是会输出两个文件，但是里面的内容是十分相似的而不是一个是背景声一个是人声。这是为什么？

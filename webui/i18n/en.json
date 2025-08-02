@@ -55,6 +55,8 @@
     "Stroke Color": "Stroke Color",
     "Stroke Width": "Stroke Width",
     "Generate Video": "Generate Video",
+    "Download Video": "Download Video",
+    "Download Subtitle": "Download Subtitle",
     "Video Script and Subject Cannot Both Be Empty": "Video Subject and Video Script cannot both be empty",
     "Generating Video": "Generating video, please wait...",
     "Start Generating Video": "Start Generating Video",

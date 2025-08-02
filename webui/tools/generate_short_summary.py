@@ -114,7 +114,7 @@ def parse_and_fix_json(json_string):
         pass
 
     # 如果所有方法都失败，尝试创建一个基本的结构
-    logger.error(f"所有JSON解析方法都失败，原始内容: {json_string[:200]}...")
+    logger.error(f"所有JSON解析方法都失败，原始内容: {json_string}...")
 
     # 尝试从文本中提取关键信息创建基本结构
     try:
