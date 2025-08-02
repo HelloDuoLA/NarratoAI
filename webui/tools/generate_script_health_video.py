@@ -462,7 +462,6 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
             segments_with_keyframes = [item for item in subtitle_keyframe_data if len(item['keyframe_paths']) > 0]
             segments_without_keyframes = [item for item in subtitle_keyframe_data if len(item['keyframe_paths']) == 0]
             
-            total_keyframes = sum(len(item['keyframe_paths']) for item in subtitle_keyframe_data)
             
             logger.info(f"数据验证完成，共 {len(subtitle_keyframe_data)} 个字幕片段")
             
@@ -569,19 +568,20 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                                     # 有关键帧：画面+字幕分析
                                     analysis_prompt = f"""
                                         我提供了 {len(keyframe_paths)} 张视频帧和对应的字幕内容，请进行画面理解与剧情梳理。
+                                        图片是按时间顺序给出的。
 
                                         字幕时间段：{timestamp}
-                                        字幕内容："{subtitle_text}"
+                                        持续时长：{duration} 秒
+                                        说话人与字幕内容："{subtitle_text}"
 
                                         请仔细分析视频帧的内容，并结合字幕文本，完成以下任务：
-                                        1. 画面理解：详细描述画面中的主要内容、人物、动作、场景、情感表达
+                                        1. 画面理解：详细描述画面中的主要内容、人物、动作、场景。
                                         2. 剧情梳理：基于画面和字幕，理解这个片段在整个故事中的作用和意义
 
                                         请务必使用 JSON 格式输出你的结果：
                                         {{
                                             "scene_description": "详细的画面描述，包含主要内容、人物、动作和场景",
-                                            "emotion_tone": "画面和字幕传达的情感色彩",
-                                            "key_elements": ["列出", "重要的", "视觉元素"],
+                                            "key_elements": ["列出重要的最多三个视觉元素"],
                                             "plot_analysis": "这个片段在剧情中的作用和意义",
                                             "content_summary": "对这个片段内容的简洁总结"
                                         }}
@@ -606,7 +606,6 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                                                 if analysis_data:
                                                     # 保存分析结果到数据结构中
                                                     data_item['scene_description'] = analysis_data.get('scene_description', '')
-                                                    data_item['emotion_tone'] = analysis_data.get('emotion_tone', '')
                                                     data_item['key_elements'] = analysis_data.get('key_elements', [])
                                                     data_item['plot_analysis'] = analysis_data.get('plot_analysis', '')
                                                     data_item['content_summary'] = analysis_data.get('content_summary', '')
@@ -643,14 +642,13 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
 
                                         虽然没有画面信息，但请基于字幕文本内容，完成以下分析：
                                         1. 内容理解：从字幕推测可能的画面场景、人物动作、环境描述
-                                        2. 情感分析：分析字幕传达的情感色彩和语气（如：积极、消极、中性、兴奋、平静、紧张等）
+                                        2. 情感分析：分析字幕传达和语气（如：积极、消极、中性、兴奋、平静、紧张等）
                                         3. 剧情推测：根据字幕内容推测这个片段在整体故事中的作用
                                         4. 关键信息提取：识别字幕中的重要信息点
 
                                         请务必使用 JSON 格式输出你的结果：
                                         {{
                                             "scene_description": "基于字幕推测的可能画面场景描述",
-                                            "emotion_tone": "字幕传达的具体情感色彩（如：积极向上、轻松愉快、严肃认真、紧张刺激等）",
                                             "key_elements": ["从字幕中", "提取的", "关键信息点"],
                                             "plot_analysis": "这个片段在剧情中的推测作用和意义",
                                             "content_summary": "对这个字幕片段的深度理解总结"
@@ -675,7 +673,6 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                                             if text_analysis_data:
                                                 # 保存分析结果到数据结构中
                                                 data_item['scene_description'] = text_analysis_data.get('scene_description', f"基于字幕推测：{subtitle_text}")
-                                                data_item['emotion_tone'] = text_analysis_data.get('emotion_tone', '中性')
                                                 data_item['key_elements'] = text_analysis_data.get('key_elements', [])
                                                 data_item['plot_analysis'] = text_analysis_data.get('plot_analysis', f"基于字幕内容推测：{subtitle_text}")
                                                 data_item['content_summary'] = text_analysis_data.get('content_summary', subtitle_text)
@@ -685,19 +682,16 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                                                 logger.error(f"字幕片段 {i+1} 文本分析JSON解析失败")
                                                 # 使用原始响应作为描述
                                                 data_item['scene_description'] = f"文本分析结果：{text_response[:200]}..."
-                                                data_item['emotion_tone'] = "中性"
                                                 data_item['content_summary'] = f"基于字幕：{subtitle_text}"
                                             
                                         except Exception as text_parse_error:
                                             logger.error(f"解析字幕片段 {i+1} 的文本分析结果失败: {text_parse_error}")
                                             # 使用原始响应作为描述
                                             data_item['scene_description'] = f"文本分析结果：{text_response[:200]}..."
-                                            data_item['emotion_tone'] = "中性"
                                             data_item['content_summary'] = f"基于字幕：{subtitle_text}"
                                     else:
                                         logger.warning(f"字幕片段 {i+1} 文本分析失败，未返回结果")
                                         data_item['scene_description'] = f"基于字幕推测：{subtitle_text}"
-                                        data_item['emotion_tone'] = "中性"
                                         data_item['content_summary'] = f"基于字幕：{subtitle_text}"
                                         
                             finally:
@@ -812,9 +806,9 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                     }]
                 
                 """
-                6. 生成解说文案（针对健康视频优化）
+                6. 生成解说文案
                 """
-                logger.info("开始生成健康视频解说文案")
+                logger.info("开始生成解说文案")
                 update_progress(80, "正在生成解说文案...")
                 
                 # 导入解说文案生成函数
@@ -828,43 +822,42 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                 now = datetime.now()
                 timestamp_str = now.strftime("%Y%m%d_%H%M")
                 
-                # 创建专门针对健康视频的markdown转换函数
+                # 创建专门针对粤语长视频的markdown转换函数
                 def parse_health_video_to_markdown(subtitle_keyframe_data, themes):
                     """
-                    将健康视频的字幕和画面分析数据转换为Markdown格式
-                    针对健康视频的特点进行优化
+                    将粤语长视频的字幕和画面分析数据转换为Markdown格式
+                    针对粤语长视频的特点进行优化
                     """
-                    markdown = "# 健康视频内容分析\n\n"
+                    markdown = "# 长视频内容分析\n\n"
                     
                     # 添加主题信息
-                    if themes:
-                        markdown += "## 视频主题\n"
-                        for i, theme in enumerate(themes[:3], 1):  # 只显示前3个主题
-                            theme_name = theme.get('theme_name', f'主题{i}')
-                            theme_desc = theme.get('theme_description', '')
-                            relevance = theme.get('relevance_score', 0)
-                            markdown += f"- **{theme_name}** (相关度: {relevance:.2f}): {theme_desc}\n"
-                        markdown += "\n"
+                    # if themes:
+                    #     markdown += "## 视频主题\n"
+                    #     # 只显示第一个相关性最高的主题
+                    #     theme = themes[0]
+                    #     theme_name = theme.get('theme_name', '主题1')
+                    #     theme_desc = theme.get('theme_description', '')
+                    #     relevance = theme.get('relevance_score', 0)
+                    #     markdown += f"- **{theme_name}** (相关度: {relevance:.2f}): {theme_desc}\n"
+                    #     markdown += "\n"
                     
                     # 处理每个字幕片段
                     for i, data_item in enumerate(subtitle_keyframe_data, 1):
                         timestamp = data_item['timestamp']
                         subtitle_text = data_item['subtitle_text']
                         scene_description = data_item.get('scene_description', '')
-                        emotion_tone = data_item.get('emotion_tone', '')
                         key_elements = data_item.get('key_elements', [])
                         plot_analysis = data_item.get('plot_analysis', '')
                         content_summary = data_item.get('content_summary', '')
-                        
+                        duration = data_item.get('duration', 0)
+
                         markdown += f"## 片段 {i}\n"
                         markdown += f"- **时间范围**: {timestamp}\n"
-                        markdown += f"- **原始字幕**: {subtitle_text}\n"
+                        markdown += f"- **持续时间**: {duration:.2f}\n秒"
+                        markdown += f"- **原始字幕(带说话人与BGM标识)**: {subtitle_text}\n"
                         
                         if scene_description:
                             markdown += f"- **画面描述**: {scene_description}\n"
-                        
-                        if emotion_tone:
-                            markdown += f"- **情感色彩**: {emotion_tone}\n"
                         
                         if key_elements:
                             elements_str = "、".join(key_elements)
@@ -880,11 +873,11 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                     
                     return markdown
                 
-                # 生成专门针对健康视频的markdown内容
+                # 生成专门针对粤语长视频的markdown内容
                 markdown_output = parse_health_video_to_markdown(subtitle_keyframe_data, themes)
                 
                 # 保存markdown内容以便调试
-                markdown_file = os.path.join(analysis_dir, f"health_video_markdown_{timestamp_str}.md")
+                markdown_file = os.path.join(analysis_dir, f"cantonese_long_video_markdown_{timestamp_str}.md")
                 with open(markdown_file, 'w', encoding='utf-8') as f:
                     f.write(markdown_output)
                 logger.info(f"Markdown内容已保存到: {markdown_file}")
@@ -903,12 +896,18 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                 }
                 check_video_config(llm_params)
                 
+                theme = themes[0]
+                theme_name = theme.get('theme_name', '主题1')
+                theme_desc = theme.get('theme_description', '')
+                    
                 # 生成解说文案 - 保持与原有函数的兼容性
                 narration = generate_narration(
                     markdown_output,
                     text_api_key,
                     base_url=text_base_url,
-                    model=text_model
+                    model=text_model,
+                    theme=theme_name,
+                    theme_description=theme_desc
                 )
                 
                 # 使用增强的JSON解析器
@@ -919,6 +918,34 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                     raise Exception("解说文案格式错误，无法解析JSON或缺少items字段")
                 
                 narration_dict = narration_data['items']
+  
+                # 统计所有片段的总持续时间，复用现有的时间转换函数
+                total_duration_ms = 0
+                for item in narration_dict:
+                    timestamp = item.get('timestamp', '')
+                    if timestamp and '-' in timestamp:
+                        try:
+                            # 解析时间戳格式 '00:00:05,640-00:00:08,720'
+                            start_str, end_str = timestamp.split('-')
+                            # 将逗号替换为点号以适配to_ms函数的格式要求
+                            start_str = start_str.replace(',', '.')
+                            end_str = end_str.replace(',', '.')
+                            # 使用现有的to_ms函数进行转换
+                            start_ms = to_ms(start_str)
+                            end_ms = to_ms(end_str)
+                            duration_ms = end_ms - start_ms
+                            total_duration_ms += duration_ms
+                        except Exception as e:
+                            logger.warning(f"解析时间戳失败: {timestamp}, 错误: {e}")
+                            continue
+                
+                # 使用现有的to_hmsf函数转换为时分秒格式
+                formatted_duration = to_hmsf(total_duration_ms)
+                total_seconds = total_duration_ms / 1000.0
+                
+                logger.info(f"所有片段总持续时间: {formatted_duration} ({total_seconds:.2f}秒)")
+                st.info(f"📊 视频总持续时间: {formatted_duration} (共{total_seconds:.2f}秒)")
+                
                 # 为 narration_dict 中每个 item 新增一个 OST: 2 的字段, 代表保留原声和配音
                 narration_dict = [{**item, "OST": 2} for item in narration_dict]
                 logger.info(f"解说文案生成完成，共 {len(narration_dict)} 个片段")
@@ -935,8 +962,8 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                 
                 # 保存完整的数据结构
                 primary_theme = themes[0] if themes else {
-                    "theme_name": "健康视频主题",
-                    "theme_description": "基于视频内容的健康相关主题",
+                    "theme_name": "粤语长视频主题",
+                    "theme_description": "基于视频内容的综合主题",
                     "relevance_score": 1.0
                 }
                 
@@ -944,15 +971,20 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                     "subtitle_segments": subtitle_keyframe_data,
                     "themes": themes,
                     "primary_theme": primary_theme,
-                    "script_items": json.loads(script)
+                    "script_items": json.loads(script),
+                    "total_duration": {
+                        "seconds": total_seconds,
+                        "formatted": formatted_duration,
+                        "segments_count": len(narration_dict)
+                    }
                 }
-                
-                final_analysis_file = os.path.join(analysis_dir, f"health_video_final_analysis_{timestamp_str}.json")
+
+                final_analysis_file = os.path.join(analysis_dir, f"cantonese_long_video_final_analysis_{timestamp_str}.json")
                 with open(final_analysis_file, 'w', encoding='utf-8') as f:
                     json.dump(full_data, f, ensure_ascii=False, indent=2)
                 
                 # 保存脚本文件
-                script_file = os.path.join(analysis_dir, f"health_video_script_{timestamp_str}.json")
+                script_file = os.path.join(analysis_dir, f"cantonese_long_video_script_{timestamp_str}.json")
                 with open(script_file, 'w', encoding='utf-8') as f:
                     f.write(script)
                 
@@ -960,7 +992,7 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                 logger.info(f"解说脚本已保存到: {script_file}")
                 
                 update_progress(100, "处理完成！")
-                logger.info("健康视频脚本生成任务完成")
+                logger.info("粤语长视频脚本生成任务完成")
 
             except Exception as e:
                 logger.exception(f"大模型处理过程中发生错误\n{traceback.format_exc()}")
@@ -970,7 +1002,7 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                 st.error("生成脚本失败，请检查日志")
                 st.stop()
                 
-            logger.info(f"健康视频解说脚本生成完成")
+            logger.info(f"粤语长视频解说脚本生成完成")
             
             if isinstance(script, list):
                 st.session_state['video_clip_json'] = script
