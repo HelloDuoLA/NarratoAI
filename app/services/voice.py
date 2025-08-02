@@ -244,7 +244,7 @@ def minimax_tts(text: str, voice_name: str, voice_file: str) -> Union[SubMaker, 
         "model" : model,
         "stream" : False,  # 是否使用流式
         "voice_id" : voice_name,  # 语音ID
-        "speed" : 1.1,  # 语速
+        "speed" : 1.3,  # 语速
         "vol" : 1.0,  # 音量
         "pitch" : -2,  # 音调
         "emotion" : "neutral",  # 情感

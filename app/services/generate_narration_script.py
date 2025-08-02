@@ -86,7 +86,7 @@ def parse_frame_analysis_to_markdown(json_file_path):
         return f"处理JSON文件时出错: {traceback.format_exc()}"
 
 
-def generate_narration(markdown_content, api_key, base_url, model):
+def generate_narration(markdown_content, api_key, base_url, model, theme="", theme_description=""):
     """
     调用大模型API根据视频帧分析的Markdown内容生成解说文案 - 已重构为使用新的LLM服务架构
 
@@ -99,7 +99,7 @@ def generate_narration(markdown_content, api_key, base_url, model):
     try:
         # 优先使用新的LLM服务架构
         logger.info("使用新的LLM服务架构生成解说文案")
-        result = generate_narration_new(markdown_content, api_key, base_url, model)
+        result = generate_narration_new(markdown_content, api_key, base_url, model, theme, theme_description)
         return result
 
     except Exception as e:

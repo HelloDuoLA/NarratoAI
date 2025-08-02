@@ -13,7 +13,7 @@ from app.models.schema import VideoClipParams, VideoAspect
 
 # 初始化配置 - 必须是第一个 Streamlit 命令
 st.set_page_config(
-    page_title="🤖✂️ AI铰剪",
+    page_title=" AI铰剪",
     page_icon="📽️",
     layout="wide",
     initial_sidebar_state="auto",
@@ -33,7 +33,6 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 def init_log():
     """初始化日志配置"""
-    from loguru import logger
     logger.remove()
     _lvl = "DEBUG"
 
@@ -283,10 +282,9 @@ def render_generate_button():
 
         def log_received(msg):
             with log_container:
-                log_records.append(msg)
+                log_records.insert(0, msg)  # 将新消息插入到列表开头
                 st.code("\n".join(log_records))
 
-        from loguru import logger
         logger.add(log_received)
         
         logger.info(tr("开始生成视频"))
@@ -375,10 +373,10 @@ def main():
     st.markdown("""
     <div style="text-align: left; margin-bottom: 1rem;">
         <h1 style="font-size: 3rem; margin: 0; color: #1f77b4; font-weight: bold;">
-            🤖✂️ AI铰剪
+            AI铰剪 🤖✂️
         </h1>
         <p style="font-size: 0.9rem; margin: 0; color: #666; margin-top: -0.5rem;">
-            <em>AI铰剪 • Powered by NarratoAI</em> 📽️
+            <em>基于开源项目NarratoAI修改</em> 📽️
         </p>
     </div>
     """, unsafe_allow_html=True)

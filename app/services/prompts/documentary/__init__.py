@@ -11,6 +11,7 @@
 
 from .frame_analysis import FrameAnalysisPrompt
 from .narration_generation import NarrationGenerationPrompt
+from .cantonese_health import CantoneseDocumentaryPrompt
 from ..manager import PromptManager
 
 
@@ -24,10 +25,15 @@ def register_prompts():
     # 注册解说文案生成提示词
     narration_prompt = NarrationGenerationPrompt()
     PromptManager.register_prompt(narration_prompt, is_default=True)
+    
+    # 注册粤语长片剪辑提示词
+    cantonese_prompt = CantoneseDocumentaryPrompt()
+    PromptManager.register_prompt(cantonese_prompt, is_default=True)
 
 
 __all__ = [
     "FrameAnalysisPrompt",
     "NarrationGenerationPrompt",
-    "register_prompts"
+    "CantoneseDocumentaryPrompt",
+    "register_prompts",
 ]

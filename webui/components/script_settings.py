@@ -54,10 +54,10 @@ def render_script_file(tr, params):
     """渲染脚本文件选择"""
     script_list = [
         (tr("None"), ""),
+        (tr("粤语节目长视频剪辑"), "health_video"),
         (tr("Auto Generate"), "auto"),
         (tr("Short Generate"), "short"),
         (tr("Short Drama Summary"), "summary"),
-        (tr("粤语养生节目短视频解说（没完成）"), "health_video"),
         (tr("Upload Script"), "upload_script")
     ]
 
@@ -255,7 +255,7 @@ def render_video_details(tr):
     st.session_state['custom_prompt'] = custom_prompt
     return video_theme, custom_prompt
 
-# TODO:渲染健康视频剪辑选项
+# TODO:渲染粤语长视频剪辑选项
 def render_health_video(tr):
     render_subtitle_file(tr)
     
@@ -429,7 +429,7 @@ def render_script_buttons(tr, params):
             temperature = st.session_state.get('temperature')
             generate_script_short_sunmmary(params, subtitle_path, video_theme, temperature)
         elif script_path == "health_video":
-            # 执行 健康视频 脚本生成, 结合画面和字幕
+            # 执行 粤语长视频 脚本生成, 结合画面和字幕
             subtitle_path = st.session_state.get('subtitle_path') # 获取字幕文件
             temperature = st.session_state.get('temperature')
             #? temperature 需要吗?

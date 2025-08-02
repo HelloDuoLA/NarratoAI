@@ -109,7 +109,7 @@ class LegacyLLMAdapter:
     
     
     @staticmethod
-    def generate_narration(markdown_content: str, api_key: str, base_url: str, model: str) -> str:
+    def generate_narration(markdown_content: str, api_key: str, base_url: str, model: str, theme="", theme_description="") -> str:
         """
         生成解说文案 - 兼容原有接口
 
@@ -126,9 +126,11 @@ class LegacyLLMAdapter:
         try:
             # 使用新的提示词管理系统
             prompt = PromptManager.get_prompt(
-                category="health",#"documentary",
-                name="cantonese_health_documentary",#"narration_generation",
+                category="cantonese_long_video",#"documentary",
+                name="cantonese_long_video_editing",#"narration_generation",
                 parameters={
+                    "theme": theme,
+                    "theme_description": theme_description,
                     "video_frame_description": markdown_content
                 }
             )
@@ -138,7 +140,7 @@ class LegacyLLMAdapter:
                 UnifiedLLMService.generate_text,
                 prompt=prompt,
                 system_prompt="你是一名专业的短视频解说文案撰写专家。",
-                temperature=1.5,
+                temperature=0.7,
                 response_format="json"
             )
 
@@ -284,7 +286,8 @@ class TextAnalyzerAdapter:
             results = await UnifiedLLMService.analyze_themes(
                 text_content=text_content,
                 prompt=custom_prompt,  # 如果为 None，统一服务会使用默认提示
-                provider=self.provider
+                provider=self.provider,
+                temperature = 1.5
             )
             return results
         except Exception as e:
@@ -424,6 +427,6 @@ def create_text_analyzer(provider: str, api_key: str, model: str, base_url: str 
     return LegacyLLMAdapter.create_text_analyzer(provider, api_key, model, base_url)
 
 
-def generate_narration(markdown_content: str, api_key: str, base_url: str, model: str) -> str:
+def generate_narration(markdown_content: str, api_key: str, base_url: str, model: str, theme: str="", theme_description: str="") -> str:
     """生成解说文案 - 全局函数"""
-    return LegacyLLMAdapter.generate_narration(markdown_content, api_key, base_url, model)
+    return LegacyLLMAdapter.generate_narration(markdown_content, api_key, base_url, model, theme, theme_description)
