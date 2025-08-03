@@ -102,9 +102,9 @@ def start_subclip(task_id: str, params: VideoClipParams, subclip_path_videos: di
     """
     # TODO:这么做合理么
     logger.info("\n\n## 3. 裁剪视频")
-    video_clip_result = clip_video.clip_video(params.video_origin_path, tts_results)
+    video_clip_result = clip_video.clip_video(params.video_origin_path, tts_results) # 这里重新剪辑作用又是什么?是需要额外专门预留一点时间给TTS?
     # 更新 list_script 中的时间戳
-    tts_clip_result = {tts_result['_id']: tts_result['audio_file'] for tts_result in tts_results}
+    tts_clip_result = {tts_result['_id']: tts_result['audio_file'] for tts_result in tts_results} # 构建一个字典
     subclip_clip_result = {
         tts_result['_id']: tts_result['subtitle_file'] for tts_result in tts_results
     }
@@ -145,8 +145,17 @@ def start_subclip(task_id: str, params: VideoClipParams, subclip_path_videos: di
     combined_video_path = path.join(utils.task_dir(task_id), f"merger.mp4")
     logger.info(f"\n\n## 5. 合并视频: => {combined_video_path}")
     # 如果 new_script_list 中没有 video，则使用 subclip_path_videos 中的视频
-    video_clips = [new_script['video'] if new_script.get('video') else subclip_path_videos.get(new_script.get('_id', '')) for new_script in new_script_list]
+    # video_clips = [new_script['video'] if new_script.get('video') else subclip_path_videos.get(new_script.get('_id', '')) for new_script in new_script_list]
 
+    video_clips = []
+    for new_script in new_script_list:
+        if new_script.get('video'):
+            video_clips.append(new_script['video'])
+        else:
+            script_id = new_script.get('_id', '')
+            video_path = subclip_path_videos.get(script_id + 1)
+            video_clips.append(video_path)
+    
     merger_video.combine_clip_videos(
         output_video_path=combined_video_path,
         video_paths=video_clips,
@@ -163,7 +172,7 @@ def start_subclip(task_id: str, params: VideoClipParams, subclip_path_videos: di
     logger.info(f"\n\n## 6. 最后一步: 合并字幕/BGM/配音/视频 -> {output_video_path}")
 
     # bgm_path = '/Users/apple/Desktop/home/NarratoAI/resource/songs/bgm.mp3'
-    bgm_path = utils.get_bgm_file()
+    bgm_path = utils.get_bgm_file(st.session_state.get('bgm_type', ''))
 
     # 获取优化的音量配置
     optimized_volumes = get_recommended_volumes_for_content('mixed')
@@ -208,11 +217,12 @@ def start_subclip(task_id: str, params: VideoClipParams, subclip_path_videos: di
     '''
     # TODO:语音识别字幕
     current_date = datetime.now().strftime("%Y%m%d_%H%M")
+    result = { "final_subtitle_file": None}
     result = perform_speech_recognition(combined_video_path, video_name=f"{current_date}_output_video")
 
-    logger.success(f"任务 {task_id} 已完成, 生成 {len(final_video_paths)} 个视频.")
-    logger.success(f"视频路径: {final_video_paths[0]}")
-    logger.success(f"字幕路径: {result['final_subtitle_file']}")
+    # logger.success(f"任务 {task_id} 已完成, 生成 {len(final_video_paths)} 个视频.")
+    # logger.success(f"视频路径: {final_video_paths[0]}")
+    # logger.success(f"字幕路径: {result['final_subtitle_file']}")
 
     kwargs = {
         "videos": final_video_paths,

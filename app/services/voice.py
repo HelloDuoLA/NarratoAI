@@ -244,9 +244,9 @@ def minimax_tts(text: str, voice_name: str, voice_file: str) -> Union[SubMaker, 
         "model" : model,
         "stream" : False,  # 是否使用流式
         "voice_id" : voice_name,  # 语音ID
-        "speed" : 1.3,  # 语速
+        "speed" : 1.2,  # 语速
         "vol" : 1.0,  # 音量
-        "pitch" : -2,  # 音调
+        "pitch" : 0,  # 音调
         "emotion" : "neutral",  # 情感
         "sample_rate" : 44100,  # 采样率
         "bitrate" : 256000,  # 比特率
@@ -268,7 +268,7 @@ def minimax_tts(text: str, voice_name: str, voice_file: str) -> Union[SubMaker, 
             extra_info = parsed_json['extra_info']
             if not check_minimax_code(base_resp['status_code']):
                 print(f"base_resp['message']: {base_resp['message']}")
-                raise Exception(f"Error: {base_resp['message']}")
+                raise Exception(f"Error: {base_resp['message']} extra_info:{extra_info}")
             # 获取audio字段的值
             audio_value = bytes.fromhex(parsed_json['data']['audio'])
             # 字幕 parsed_json['data']['subtitle_file'], 需要去下载
@@ -279,6 +279,7 @@ def minimax_tts(text: str, voice_name: str, voice_file: str) -> Union[SubMaker, 
             
             with open(voice_file, 'wb') as file:
                 file.write(audio_value)
+            # logger.info(f"音频保存路径: {voice_file}")
 
             # 处理字幕文件，创建SubMaker对象
             if subtitle_file_path:

@@ -15,6 +15,8 @@ import PIL.Image
 
 from ..base import VisionModelProvider, TextModelProvider
 from ..exceptions import APICallError
+from json_repair import repair_json
+import json
 
 
 class ErnieAIStudioVisionProvider(VisionModelProvider):
@@ -200,6 +202,7 @@ class ErnieAIStudioVisionProvider(VisionModelProvider):
             if response.choices and len(response.choices) > 0:
                 content = response.choices[0].message.content
                 logger.debug(f"ERNIE AI Studio批量分析成功，图片数量: {len(images)}")
+                logger.debug(f"消耗tokens: {response.usage.total_tokens if response.usage else 'N/A'}")
                 return content
             else:
                 raise APICallError("ERNIE AI Studio API返回空响应")
@@ -277,11 +280,11 @@ class ErnieAIStudioTextProvider(TextModelProvider):
         messages = self._build_messages(prompt, system_prompt)
         
         # 构建请求参数
-        request_params = {
-            "model": self.model_name,
-            "messages": messages,
-            "temperature": temperature
-        }
+        # request_params = {
+        #     "model": self.model_name,
+        #     "messages": messages,
+        #     "temperature": temperature,
+        # }
         
         # if max_tokens:
         #     request_params["max_tokens"] = max_tokens
@@ -292,11 +295,34 @@ class ErnieAIStudioTextProvider(TextModelProvider):
         
         try:
             # 发送API请求
-            response = await asyncio.to_thread(
-                self.client.chat.completions.create,
-                max_tokens=12000,
-                **request_params
+            # response = await asyncio.to_thread(
+            #     self.client.chat.completions.create,
+            #     max_tokens=8000,
+            #     top_p=0.8,
+            #     frequency_penalty=0,
+            #     presence_penalty=0,
+            #     stream=False,
+            #     extra_body={
+            #         "penalty_score": 1,
+            #         "enable_thinking": True
+            #     },
+            #     **request_params
+            # )
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+                stream=False,
+                extra_body={
+                    "penalty_score": 1,
+                    "enable_thinking": True
+                },
+                max_completion_tokens=12000,
+                temperature=temperature,
+                top_p=0.8,
+                frequency_penalty=0,
+                presence_penalty=0
             )
+            
             
             # 提取生成的内容
             if response.choices and len(response.choices) > 0:
@@ -304,9 +330,33 @@ class ErnieAIStudioTextProvider(TextModelProvider):
                 
                 # 对于JSON格式，清理输出
                 if response_format == "json":
-                    content = self._clean_json_output(content)
-                
+                    # content = self._clean_json_output(content)
+                    content = repair_json(content, return_objects=True)
+                from datetime import datetime
+                now = datetime.now()
+                timestamp_str = now.strftime("%Y%m%d_%H%M")
+                    
                 logger.debug(f"ERNIE AI Studio API调用成功，消耗tokens: {response.usage.total_tokens if response.usage else 'N/A'}")
+                if hasattr(response.choices[0].message, 'reasoning_content') and response.choices[0].message.reasoning_content:
+                    
+                    fp = f"/disk/disk1/xzc_data/Competition/baidu_lic/3rdProject/NarratoAI/storage/temp/prompts/{timestamp_str}_reasoning_content.md"
+                    # 将思考内容保存为Markdown文件
+                    with open(fp, "w", encoding="utf-8") as f:
+                        f.write(f"# ERNIE 思考过程\n\n")
+                        f.write(f"**生成时间**: {now.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+                        f.write(f"**模型**: {self.model_name}\n\n")
+                        f.write("---\n\n")
+                        f.write(response.choices[0].message.reasoning_content)
+
+                    logger.info(f"完整推理内容保存在 {fp}")
+                fp = f"/disk/disk1/xzc_data/Competition/baidu_lic/3rdProject/NarratoAI/storage/temp/prompts/{timestamp_str}_content.json"
+                # 构建要保存的数据
+                
+                
+                with open(fp, "w", encoding="utf-8") as f:
+                    json.dump(content, f, ensure_ascii=False, indent=2)
+
+                logger.info(f"完整补全内容保存在 {fp}")
                 return content
             else:
                 raise APICallError("ERNIE AI Studio API返回空响应")

@@ -89,6 +89,7 @@ def check_video_has_audio(video_path: str) -> bool:
         '-of', 'csv=p=0',
         video_path
     ]
+    # ffprobe -v error -select_streams a:0 -show_entries stream=codec_type -of csv=p=0
 
     try:
         result = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)

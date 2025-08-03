@@ -568,14 +568,14 @@ def render_bgm_settings(tr):
     """渲染背景音乐设置"""
     # 背景音乐选项
     bgm_options = [
-        (tr("No Background Music"), ""),
         (tr("Random Background Music"), "random"),
+        (tr("No Background Music"), ""),
         (tr("Custom Background Music"), "custom"),
     ]
 
     selected_index = st.selectbox(
         tr("Background Music"),
-        index=0,
+        index=1,
         options=range(len(bgm_options)),
         format_func=lambda x: bgm_options[x][0],
     )

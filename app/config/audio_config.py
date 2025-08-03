@@ -183,7 +183,7 @@ def get_recommended_volumes_for_content(content_type: str = 'mixed') -> Dict[str
         'mixed': {
             'tts_volume': 0.8,
             'original_volume': 1.3,
-            'bgm_volume': 0.3,
+            'bgm_volume': 0.1,
         },
         'voice_only': {
             'tts_volume': 1.0,

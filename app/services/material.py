@@ -5,8 +5,6 @@ import traceback
 from urllib.parse import urlencode
 from datetime import datetime
 import json
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 from typing import List, Optional
@@ -345,7 +343,6 @@ def save_clip_video(timestamp: str, origin_video: str, save_dir: str = "") -> st
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
-    # TODO:为什么会出现时间戳的区别呢
     # 解析时间戳
     if "-->" in timestamp:
         # 如果是字幕格式的时间戳，提取起始和结束时间
@@ -382,9 +379,6 @@ def save_clip_video(timestamp: str, origin_video: str, save_dir: str = "") -> st
         # 计算时间点
         start = time_to_seconds(start_str)
         end = time_to_seconds(end_str)
-        
-        # 添加调试日志
-        logger.info(f"解析时间戳: {timestamp} -> 起始: {start:.3f}秒, 结束: {end:.3f}秒, 时长: {end-start:.3f}秒")
 
         # 验证时间段
         if start >= total_duration:
@@ -401,7 +395,7 @@ def save_clip_video(timestamp: str, origin_video: str, save_dir: str = "") -> st
 
         # 计算剪辑时长
         duration = end - start
-        logger.info(f"剪辑视频: {format_timestamp(start)} - {format_timestamp(end)}，时长 {duration:.3f}秒")
+        # logger.info(f"开始剪辑视频: {format_timestamp(start)} - {format_timestamp(end)}，时长 {format_timestamp(duration)}")
 
         # 获取硬件加速选项
         hwaccel = _detect_hardware_acceleration()
@@ -512,81 +506,24 @@ def clip_videos(task_id: str, timestamp_terms: List[str], origin_video: str, pro
     Returns:
         剪辑后的视频路径
     """
-    start_time = time.time()  # 记录开始时间
     video_paths = {}
     total_items = len(timestamp_terms)
-    completed_count = 0
-    
-    # 获取材料目录
-    material_directory = config.app.get("material_directory", "").strip()
-    
-    def process_single_clip(index, timestamp):
-        """处理单个视频剪辑的内部函数"""
-        import threading
-        thread_id = threading.current_thread().name
-        
+    for index, item in enumerate(timestamp_terms):
+        material_directory = config.app.get("material_directory", "").strip()
         try:
-            saved_video_path = save_clip_video(
-                timestamp=timestamp, 
-                origin_video=origin_video, 
-                save_dir=material_directory
-            )
-            
+            saved_video_path = save_clip_video(timestamp=item, origin_video=origin_video, save_dir=material_directory)
             if saved_video_path:
-                logger.debug(f"线程 {thread_id} 完成任务 {index+1}: {timestamp}")
-                return index + 1, saved_video_path
-            else:
-                logger.warning(f"剪辑失败: {timestamp}")
-                return index + 1, None
-                
+                video_paths.update({index+1:saved_video_path})
+
+            # 更新进度
+            if progress_callback:
+                progress_callback(index + 1, total_items)
         except Exception as e:
-            logger.error(f"视频裁剪失败: {timestamp} => {str(e)}")
-            return index + 1, None
-    
-    # 智能确定线程数 - 考虑实际瓶颈
-    cpu_count = os.cpu_count() or 4
-    
-    # 对于FFmpeg这种I/O和编码密集型任务，线程数可以略高于CPU核心数
-    # 但过高会导致资源竞争，通常2-4倍CPU核心数是合理的
-    optimal_workers = min(cpu_count * 2, 16)  # 限制最大线程数避免过度竞争
-    max_workers = min(optimal_workers, total_items)
-    
-    logger.info(f"CPU核心数: {cpu_count}, 优化线程数: {max_workers}")
-    logger.info(f"开始并行处理 {total_items} 个视频剪辑任务，使用 {max_workers} 个线程")
-    
-    # 使用线程池并行处理
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # 提交所有任务
-        futures = [
-            executor.submit(process_single_clip, index, timestamp)
-            for index, timestamp in enumerate(timestamp_terms)
-        ]
-        
-        # 收集结果
-        for future in as_completed(futures):
-            try:
-                index, video_path = future.result()
-                if video_path:
-                    video_paths[index] = video_path
-                
-                completed_count += 1
-                if progress_callback:
-                    progress_callback(completed_count, total_items)
-                    
-            except Exception as e:
-                logger.error(f"处理剪辑任务时发生异常: {str(e)}")
-                completed_count += 1
-                if progress_callback:
-                    progress_callback(completed_count, total_items)
-    
-    # 计算总耗时
-    total_duration = time.time() - start_time
-    successful_clips = len(video_paths)
-    failed_clips = total_items - successful_clips
-    
-    logger.success(f"视频剪辑完成: {successful_clips}/{total_items} 个成功，{failed_clips} 个失败")
-    logger.success(f"总耗时: {total_duration:.2f}秒，平均每个视频: {total_duration/total_items:.2f}秒")
-    
+            logger.error(f"视频裁剪失败: {utils.to_json(item)} =>\n{str(traceback.format_exc())}")
+            return {}
+
+    logger.success(f"裁剪 {len(video_paths)} videos")
+    # logger.debug(json.dumps(video_paths, indent=4, ensure_ascii=False))
     return video_paths
 
 

@@ -135,20 +135,45 @@ class LegacyLLMAdapter:
                 }
             )
 
+            system_prompt = PromptManager.get_prompt(
+                category="cantonese_video_edit",#"documentary",
+                name="cantonese_long_video_system_prompt",#"narration_generation",
+                parameters={
+                }
+            )
+            from datetime import datetime
+            now = datetime.now()
+            timestamp_str = now.strftime("%Y%m%d_%H%M")
+            fp = f"/disk/disk1/xzc_data/Competition/baidu_lic/3rdProject/NarratoAI/storage/temp/prompts/{timestamp_str}_prompt.md"
+            
+
+            # 将markdown内容直接保存为Markdown文件
+            with open(fp, "w", encoding="utf-8") as f:
+                f.write(f"# 完整的提示词 \n\n")
+                f.write(f"**生成时间**: {now.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+                f.write(f"**主题**: {theme}\n\n")
+                f.write(f"**主题描述**: {theme_description}\n\n")
+                f.write("---\n\n")
+                f.write(system_prompt)
+                f.write("\n\n---\n\n")
+                f.write(prompt)
+
+            logger.info(f"完整的提示词保存保存在 {fp}")
+
             # 使用统一服务生成文案
             result = _run_async_safely(
                 UnifiedLLMService.generate_text,
                 prompt=prompt,
-                system_prompt="你是一名专业的短视频解说文案撰写专家。",
-                temperature=0.7,
+                system_prompt=system_prompt,
+                temperature=0.2,
                 response_format="json"
             )
 
             # 使用增强的JSON解析器
-            from webui.tools.generate_short_summary import parse_and_fix_json
-            parsed_result = parse_and_fix_json(result)
+            # from webui.tools.generate_short_summary import parse_and_fix_json
+            # parsed_result = parse_and_fix_json(result)
 
-            if not parsed_result:
+            if not result:
                 logger.error("无法解析LLM返回的JSON数据")
                 # 返回一个基本的JSON结构而不是错误字符串
                 return json.dumps({
@@ -163,7 +188,7 @@ class LegacyLLMAdapter:
                 }, ensure_ascii=False)
 
             # 确保返回的是JSON字符串
-            return json.dumps(parsed_result, ensure_ascii=False)
+            return json.dumps(result, ensure_ascii=False)
 
         except Exception as e:
             logger.error(f"生成解说文案失败: {str(e)}")

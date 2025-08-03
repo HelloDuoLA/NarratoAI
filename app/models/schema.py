@@ -24,7 +24,7 @@ class AudioVolumeDefaults:
     ORIGINAL_VOLUME = 1.2
 
     # 背景音乐音量默认值
-    BGM_VOLUME = 0.3
+    BGM_VOLUME = 0.15
 
     # 音量范围
     MIN_VOLUME = 0.0
