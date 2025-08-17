@@ -137,7 +137,7 @@ def update_script_timestamps(
 
         # 如果提供了音频结果字典且ID存在于音频结果中，直接使用对应的音频路径
         if audio_result:
-            if item_id and item_id in audio_result:
+            if item_id in audio_result:
                 item_copy['audio'] = audio_result[item_id]
             elif orig_timestamp in audio_result:
                 item_copy['audio'] = audio_result[orig_timestamp]
@@ -150,29 +150,29 @@ def update_script_timestamps(
                 item_copy['subtitle'] = subtitle_result[orig_timestamp]
 
         # 添加视频路径
-        if item_id and item_id in video_result:
+        if item_id in video_result:
             item_copy['video'] = video_result[item_id]
         elif orig_timestamp in video_result:
             item_copy['video'] = video_result[orig_timestamp]
 
         # 更新时间戳和计算持续时间
         current_duration = 0.0
-        if item_id and item_id in id_timestamp_mapping:
-            # 根据ID找到对应的新时间戳
-            item_copy['sourceTimeRange'] = id_timestamp_mapping[item_id]['new_timestamp']
-            current_duration = calculate_duration(item_copy['sourceTimeRange'])
-            item_copy['duration'] = current_duration
-        elif orig_timestamp in id_timestamp_mapping:
-            # 根据原始时间戳找到对应的新时间戳
-            item_copy['sourceTimeRange'] = id_timestamp_mapping[orig_timestamp]['new_timestamp']
-            current_duration = calculate_duration(item_copy['sourceTimeRange'])
-            item_copy['duration'] = current_duration
-        elif orig_timestamp:
-            # 对于未更新的时间戳，也计算并添加持续时间
-            item_copy['sourceTimeRange'] = orig_timestamp
-            current_duration = calculate_duration(orig_timestamp)
-            item_copy['duration'] = current_duration
-            
+        # if item_id in id_timestamp_mapping:
+        #     # 根据ID找到对应的新时间戳
+        #     item_copy['sourceTimeRange'] = id_timestamp_mapping[item_id]['new_timestamp']
+        #     current_duration = calculate_duration(item_copy['sourceTimeRange'])
+        #     item_copy['duration'] = current_duration
+        # elif orig_timestamp in id_timestamp_mapping:
+        #     # 根据原始时间戳找到对应的新时间戳
+        #     item_copy['sourceTimeRange'] = id_timestamp_mapping[orig_timestamp]['new_timestamp']
+        #     current_duration = calculate_duration(item_copy['sourceTimeRange'])
+        #     item_copy['duration'] = current_duration
+        # elif orig_timestamp:
+        #     # 对于未更新的时间戳，也计算并添加持续时间
+        item_copy['sourceTimeRange'] = orig_timestamp
+        current_duration = calculate_duration(orig_timestamp)
+        item_copy['duration'] = current_duration
+        
         # 计算片段在成品视频中的时间范围
         if calculate_edited_timerange and current_duration > 0:
             start_time_seconds = accumulated_duration

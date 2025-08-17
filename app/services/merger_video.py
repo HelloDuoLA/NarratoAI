@@ -467,7 +467,7 @@ def combine_clip_videos(
 
         # 第二阶段：分步骤合并视频 - 避免复杂的filter_complex滤镜
         try:
-            # 1. 首先，将所有没有音频的视频或音频被禁用的视频合并到一个临时文件中
+            # 1. 首先，将所有的视频文件保存到临时文件中，不管需不需要保留原始音频
             video_paths_only = [video["path"] for video in processed_videos]
             video_concat_path = os.path.join(temp_dir, "video_concat.mp4")
 
@@ -548,7 +548,7 @@ def combine_clip_videos(
                             break
 
                 current_time += duration
-
+            # !current_time 有点问题，少东西了
             # 4. 创建静音音频轨道作为基础
             silence_audio = os.path.join(temp_dir, "silence.aac")
             create_silence_cmd = [

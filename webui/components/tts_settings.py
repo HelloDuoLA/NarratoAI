@@ -575,7 +575,7 @@ def use_online_asr_service(oss_audio_url: str, subtitle_path: str, status_placeh
         返回阿里云格式的字幕内容
     """
     # 配置API Key
-    dashscope.api_key = 'sk-e84a65ec9a6e44fda41e548930900ff0'
+    dashscope.api_key = os.environ.get('DASHSCOPE_API_KEY')
     logger.info(f"使用OSS音频URL进行语音识别: {oss_audio_url}")
     
     # 提交异步识别任务

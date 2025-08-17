@@ -609,12 +609,13 @@ def clip_video(
     for i, item in enumerate(tts_result, 1):
         _id = item.get("_id", item.get("timestamp", "unknown"))
         timestamp = item["timestamp"]
-        start_time, _ = parse_timestamp(timestamp)
+        start_time, end_time = parse_timestamp(timestamp)
 
         # 根据持续时间计算真正的结束时间（加上1秒余量）
-        duration = item["duration"]
-        calculated_end_time = calculate_end_time(start_time, duration)
+        # duration = item["duration"]
+        # calculated_end_time = calculate_end_time(start_time, duration, 0)
 
+        calculated_end_time = end_time
         # 转换为FFmpeg兼容的时间格式（逗号替换为点）
         ffmpeg_start_time = start_time.replace(',', '.')
         ffmpeg_end_time = calculated_end_time.replace(',', '.')

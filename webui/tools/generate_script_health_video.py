@@ -862,7 +862,7 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                                         请严格按照以下JSON格式输出分析结果，不要包含任何其他解释性文字：
 
                                         {{
-                                            "scene_description": "详细的画面描述，包含主要内容、人物、动作和场景",
+                                            "scene_description": "对全部图片做出总结性的画面描述，包含主要内容、人物、动作和场景。",
                                             "key_elements": ["列出重要的最多三个视觉元素"],
                                             "plot_analysis": "这个片段在剧情中的作用和意义",
                                             "content_summary": "对这个片段内容的简洁总结",
@@ -954,12 +954,12 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                                                 text_analysis_data = parse_and_fix_json(text_response)
                                                 if text_analysis_data:
                                                     # 保存分析结果到数据结构中
-                                                    data_item['scene_description'] = text_analysis_data.get('scene_description', "无相关分析内容，不必理会该字段内容")
-                                                    data_item['key_elements'] = text_analysis_data.get('key_elements', ["无相关分析内容，不必理会该字段内容"])
-                                                    data_item['plot_analysis'] = text_analysis_data.get('plot_analysis', "无相关分析内容，不必理会该字段内容")
-                                                    data_item['content_summary'] = text_analysis_data.get('content_summary', "无相关分析内容，不必理会该字段内容")
+                                                    data_item['scene_description'] = text_analysis_data.get('scene_description', "")
+                                                    data_item['key_elements'] = text_analysis_data.get('key_elements', [""])
+                                                    data_item['plot_analysis'] = text_analysis_data.get('plot_analysis', "")
+                                                    data_item['content_summary'] = text_analysis_data.get('content_summary', "")
                                                     data_item['related_themes'] = text_analysis_data.get('related_themes', [])
-                                                    data_item['character_performance'] = text_analysis_data.get('character_performance', "无相关分析内容，不必理会该字段内容")
+                                                    data_item['character_performance'] = text_analysis_data.get('character_performance', "")
                                                     logger.info(f"字幕片段 {i+1} 文本分析完成")
                                                 else:
                                                     logger.error(f"字幕片段 {i+1} 文本分析JSON解析失败")
@@ -974,17 +974,17 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                             finally:
                                 # 最后统一检查并补充缺失的字段
                                 if 'scene_description' not in data_item or not data_item['scene_description']:
-                                    data_item['scene_description'] = "无相关分析内容，不必理会该字段内容"
+                                    data_item['scene_description'] = ""
                                 if 'key_elements' not in data_item:
                                     data_item['key_elements'] = []
                                 if 'plot_analysis' not in data_item or not data_item['plot_analysis']:
-                                    data_item['plot_analysis'] = "无相关分析内容，不必理会该字段内容"
+                                    data_item['plot_analysis'] = ""
                                 if 'content_summary' not in data_item or not data_item['content_summary']:
-                                    data_item['content_summary'] = "无相关分析内容，不必理会该字段内容"
+                                    data_item['content_summary'] = ""
                                 if 'related_themes' not in data_item:
                                     data_item['related_themes'] = []
                                 if 'character_performance' not in data_item or not data_item['character_performance']:
-                                    data_item['character_performance'] = "无相关分析内容，不必理会该字段内容"
+                                    data_item['character_performance'] = ""
                                 
                                 # 更新进度
                                 completed_count['value'] += 1
@@ -1016,12 +1016,12 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                 theme_relevance_map = {}
                 for theme in themes:
                     theme_name = theme.get('theme_name', '')
-                    relevance_score = theme.get('relevance_score', 1.0)
+                    relevance_score = theme.get('relevance_score', -1.0)
                     theme_relevance_map[theme_name] = relevance_score
                 
                 # 使用加权评分系统统计每个主题的得分
                 # 得分 = 位置得分 * 相关度
-                # 第一位: 4分, 第二位: 3分, 第三位: 1分, 后面: 0分
+                # 第一位: 4分, 第二位: 2分, 第三位: 1分, 后面: 0分
                 theme_scores = {}
                 
                 for data_item in subtitle_keyframe_data:
@@ -1100,9 +1100,6 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                 # 导入解说文案生成函数
                 from app.services.generate_narration_script import generate_narration
                 
-                # 使用当前时间创建文件名
-                now = datetime.now()
-                timestamp_str = now.strftime("%Y%m%d_%H%M")
                 
                 # 创建专门针对粤语长视频的markdown转换函数
                 def parse_health_video_to_markdown(subtitle_keyframe_data, theme_relevance_map=None):
@@ -1126,25 +1123,26 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                         duration = data_item.get('duration', 0)
 
                         markdown += f"## 片段 {i}\n"
-                        markdown += f"- **时间范围**: {timestamp}\n"
-                        markdown += f"- **当前片段的持续时间**: {duration:.2f}秒\n"
-                        markdown += f"- **原始字幕(带说话人与BGM标识)**: {subtitle_text}\n"
+                        markdown += f"- 时间范围: {timestamp}\n"
+                        markdown += f"- 当前片段的持续时间: {duration:.2f}秒\n"
+                        markdown += f"- 旁白文案最多: {int(duration * 2)} 个字\n"
+                        markdown += f"- 原始字幕(带说话人与BGM标识): {subtitle_text}\n"
                         
                         if scene_description:
-                            markdown += f"- **画面描述**: {scene_description}\n"
+                            markdown += f"- 画面描述: {scene_description}\n"
                         
-                        if key_elements:
-                            elements_str = "、".join(key_elements)
-                            markdown += f"- **关键要素**: {elements_str}\n"
+                        # if key_elements:
+                        #     elements_str = "、".join(key_elements)
+                        #     markdown += f"- 关键要素: {elements_str}\n"
                         
                         if plot_analysis:
-                            markdown += f"- **内容分析**: {plot_analysis}\n"
+                            markdown += f"- 内容分析: {plot_analysis}\n"
                         
-                        if content_summary:
-                            markdown += f"- **片段总结**: {content_summary}\n"
+                        # if content_summary:
+                        #     markdown += f"- 片段总结: {content_summary}\n"
                         
                         if character_performance:
-                            markdown += f"- **角色表现**: {character_performance}\n"
+                            markdown += f"- 角色表现: {character_performance}\n"
                         
                         if related_themes:
                             if theme_relevance_map:
@@ -1157,7 +1155,7 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                             else:
                                 # 只显示主题名称
                                 themes_str = "、".join(related_themes)
-                            markdown += f"- **相关主题**: {themes_str}\n"
+                            markdown += f"- 相关主题: {themes_str}\n"
                         
                         markdown += "\n"
                     
@@ -1167,7 +1165,7 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                 markdown_output = parse_health_video_to_markdown(subtitle_keyframe_data, theme_relevance_map)
                 
                 # 保存markdown内容以便调试
-                markdown_file = os.path.join(analysis_dir, f"cantonese_long_video_markdown_{timestamp_str}.md")
+                markdown_file = os.path.join(analysis_dir, f"{timestamp_str}_cantonese_long_video.md")
                 with open(markdown_file, 'w', encoding='utf-8') as f:
                     f.write(markdown_output)
                 logger.info(f"Markdown内容已保存到: {markdown_file}")
@@ -1203,11 +1201,14 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                 # 使用增强的JSON解析器
                 narration_data = parse_and_fix_json(narration)
                 
-                if not narration_data or 'items' not in narration_data:
-                    logger.error(f"解说文案JSON解析失败，原始内容: {narration[:200]}...")
-                    raise Exception("解说文案格式错误，无法解析JSON或缺少items字段")
+                # if not narration_data or 'items' not in narration_data:
+                #     logger.error(f"解说文案JSON解析失败，原始内容: {narration[:200]}...")
+                #     raise Exception("解说文案格式错误，无法解析JSON或缺少items字段")
+                fp = os.path.join(analysis_dir, f"{timestamp_str}_narration.json")
+                with open(fp, 'w', encoding='utf-8') as f:
+                    json.dump(narration_data, f, ensure_ascii=False, indent=2)
                 
-                narration_dict = narration_data['items']
+                narration_dict = narration_data['final']['items']
   
                 # 统计所有片段的总持续时间，复用现有的时间转换函数
                 total_duration_ms = 0
@@ -1234,13 +1235,22 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                 total_seconds = total_duration_ms / 1000.0
                 
                 logger.info(f"所有片段总持续时间: {formatted_duration} ({total_seconds:.2f}秒)")
-                # update_status_display(f"📊 视频总持续时间: {formatted_duration} (共{total_seconds:.2f}秒)")
+                
                 
                 # 显示最终成功信息
                 update_status_display(f"视频脚本生成成功！视频总持续时间: {formatted_duration} (共{total_seconds:.2f}秒)", "success")
                 
                 
-                narration_dict = [item for item in narration_dict]
+                # narration_dict = [item for item in narration_dict]
+                new_narration_dict = []
+                new_id = 0
+                for item in narration_dict:
+                    item["_id"] = new_id
+                    new_id += 1
+                    new_narration_dict.append(item)
+                
+                narration_dict = new_narration_dict
+                
                 logger.info(f"解说文案生成完成，共 {len(narration_dict)} 个片段")
                 
                 # 结果转换为JSON字符串
@@ -1268,12 +1278,12 @@ def generate_script_health_video(params, subtitle_path, max_concurrent_analysis=
                     }
                 }
 
-                final_analysis_file = os.path.join(analysis_dir, f"cantonese_long_video_final_analysis_{timestamp_str}.json")
+                final_analysis_file = os.path.join(analysis_dir, f"{timestamp_str}_cantonese_video_final_analysis.json")
                 with open(final_analysis_file, 'w', encoding='utf-8') as f:
                     json.dump(full_data, f, ensure_ascii=False, indent=2)
                 
                 # 保存脚本文件
-                script_file = os.path.join(analysis_dir, f"cantonese_long_video_script_{timestamp_str}.json")
+                script_file = os.path.join(analysis_dir, f"{timestamp_str}_cantonese_video_script_.json")
                 with open(script_file, 'w', encoding='utf-8') as f:
                     f.write(script)
                 
@@ -1325,6 +1335,8 @@ def parse_and_fix_json(json_string):
     Returns:
         dict: 解析后的字典，如果解析失败返回None
     """
+    if type(json_string) == type({}):
+        return json_string
     if not json_string or not json_string.strip():
         logger.error("JSON字符串为空")
         return None

@@ -16,7 +16,7 @@ from app.services import (voice, audio_merger, subtitle_merger, clip_video, merg
 from app.services import state as sm
 from app.utils import utils
 from .tts_final import perform_speech_recognition
-
+import copy
 
 def start_subclip(task_id: str, params: VideoClipParams, subclip_path_videos: dict):
     """
@@ -120,6 +120,7 @@ def start_subclip(task_id: str, params: VideoClipParams, subclip_path_videos: di
     if tts_segments:
         try:
             # 合并音频文件
+            # 把TTS合成的音频都填上去了, 为什么不生成TTS的音频不能在这里合呢?
             merged_audio_path = audio_merger.merge_audio_files(
                 task_id=task_id,
                 total_duration=total_duration,
@@ -218,7 +219,7 @@ def start_subclip(task_id: str, params: VideoClipParams, subclip_path_videos: di
     # TODO:语音识别字幕
     current_date = datetime.now().strftime("%Y%m%d_%H%M")
     result = { "final_subtitle_file": None}
-    result = perform_speech_recognition(combined_video_path, video_name=f"{current_date}_output_video")
+    result = perform_speech_recognition(output_video_path, video_name=f"{current_date}_output_video")
 
     # logger.success(f"任务 {task_id} 已完成, 生成 {len(final_video_paths)} 个视频.")
     # logger.success(f"视频路径: {final_video_paths[0]}")

@@ -152,30 +152,87 @@ def extract_audio_from_video(video_path: str, video_name: str, work_dir: str) ->
     """使用FFMPEG从视频中提取音频"""
     audio_path = os.path.join(work_dir, f"audio.wav")
     
-    # 使用FFmpeg提取音频
+    # 首先检查视频文件的音频流信息
+    probe_cmd = [
+        "ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams", video_path
+    ]
+    
+    try:
+        probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
+        if probe_result.returncode == 0:
+            import json
+            probe_data = json.loads(probe_result.stdout)
+            audio_streams = [s for s in probe_data.get('streams', []) if s.get('codec_type') == 'audio']
+            
+            if not audio_streams:
+                logger.error(f"视频文件 {video_path} 不包含音频流")
+                return None
+            else:
+                logger.info(f"检测到 {len(audio_streams)} 个音频流")
+                for i, stream in enumerate(audio_streams):
+                    codec = stream.get('codec_name', 'unknown')
+                    sample_rate = stream.get('sample_rate', 'unknown')
+                    channels = stream.get('channels', 'unknown')
+                    logger.info(f"音频流 {i}: 编码={codec}, 采样率={sample_rate}, 声道={channels}")
+        else:
+            logger.warning("无法探测视频文件信息，继续尝试提取音频")
+    except Exception as e:
+        logger.warning(f"探测视频信息时出错: {e}，继续尝试提取音频")
+    
+    # 使用FFmpeg提取音频，添加更宽松的参数
     cmd = [
         "ffmpeg", "-i", video_path,
         "-vn",  # 不包含视频
         "-acodec", "pcm_s16le",  # 16位PCM编码
         "-ar", "48000",  # 采样率48kHz
         "-ac", "1",  # 单声道
+        "-f", "wav",  # 明确指定输出格式
         "-y",  # 覆盖输出文件
         audio_path
     ]
     
+    # 如果标准参数失败，尝试自动音频参数
+    logger.info(f"执行FFmpeg命令: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True)
+    
     if result.returncode != 0:
-        logger.error(f"FFmpeg音频提取失败: {result.stderr}")
-        return None
+        logger.warning(f"标准参数提取失败，尝试自动参数: {result.stderr}")
+        
+        # 尝试使用自动参数
+        cmd_auto = [
+            "ffmpeg", "-i", video_path,
+            "-vn",  # 不包含视频
+            "-acodec", "pcm_s16le",  # 16位PCM编码
+            "-f", "wav",  # 明确指定输出格式
+            "-y",  # 覆盖输出文件
+            audio_path
+        ]
+        
+        logger.info(f"重试FFmpeg命令（自动参数）: {' '.join(cmd_auto)}")
+        result = subprocess.run(cmd_auto, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            logger.error(f"FFmpeg音频提取失败: {result.stderr}")
+            logger.error("建议检查:")
+            logger.error("• 视频文件是否损坏")
+            logger.error("• 视频文件是否包含音频轨道")
+            logger.error("• FFmpeg版本是否支持该视频格式")
+            return None
         
     # 检查生成的音频文件
     if not os.path.exists(audio_path):
         logger.error(f"音频文件未生成: {audio_path}")
         return None
         
+    # 检查音频文件是否为空
+    file_size = os.path.getsize(audio_path)
+    if file_size == 0:
+        logger.error("生成的音频文件为空")
+        return None
+        
     # 记录成功信息到日志
-    file_size = os.path.getsize(audio_path) / (1024 * 1024)  # MB
-    logger.info(f"音频提取成功: {audio_path}, 大小: {file_size:.2f} MB")
+    file_size_mb = file_size / (1024 * 1024)  # MB
+    logger.info(f"音频提取成功: {audio_path}, 大小: {file_size_mb:.2f} MB")
     return audio_path
 
 
@@ -360,7 +417,7 @@ def use_online_asr_service(oss_audio_url: str, subtitle_path: str):
         返回阿里云格式的字幕内容
     """
     # 配置API Key
-    dashscope.api_key = 'sk-e84a65ec9a6e44fda41e548930900ff0'
+    dashscope.api_key = os.environ.get('DASHSCOPE_API_KEY')
     logger.info(f"使用OSS音频URL进行语音识别: {oss_audio_url}")
     
     # 提交异步识别任务
@@ -368,8 +425,7 @@ def use_online_asr_service(oss_audio_url: str, subtitle_path: str):
         model='paraformer-v2',
         file_urls=[oss_audio_url],
         language_hints=['yue', "zh"],  # 支持粤语和中文
-        timestamp_alignment_enabled=True,  # 启用时间戳对齐
-        diarization_enabled=True  # 启用说话人分离
+        timestamp_alignment_enabled=True  # 启用时间戳对齐
     )
     
     if task_response.status_code != HTTPStatus.OK:

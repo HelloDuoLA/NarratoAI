@@ -123,12 +123,13 @@ def is_minimax_voice(voice_name: str):
     return "minimax" in  voice_name.lower()
 
 def tts(
-    text: str, voice_name: str, voice_rate: float, voice_pitch: float, voice_file: str
+    text: str, voice_name: str, voice_rate: float, voice_pitch: float, voice_file: str,
+    emotion=""
 ) -> Union[SubMaker, None]:
     if is_azure_v2_voice(voice_name):
         return azure_tts_v2(text, voice_name, voice_file)
     elif is_minimax_voice(voice_name):
-        return minimax_tts(text, voice_name, voice_file)
+        return minimax_tts(text, voice_name, voice_file, emotion)
     return azure_tts_v1(text, voice_name, voice_rate, voice_pitch, voice_file)
 
 
@@ -198,7 +199,7 @@ def azure_tts_v1(
     return None
 
 # TODO: 待完善
-def minimax_tts(text: str, voice_name: str, voice_file: str) -> Union[SubMaker, None]:
+def minimax_tts(text: str, voice_name: str, voice_file: str, emotion="calm") -> Union[SubMaker, None]:
     group_id = config.minimax.get("MINIMAX_GROUP_ID", "")
     api_key = config.minimax.get("MINIMAX_KEY", "")
             
@@ -244,12 +245,12 @@ def minimax_tts(text: str, voice_name: str, voice_file: str) -> Union[SubMaker, 
         "model" : model,
         "stream" : False,  # 是否使用流式
         "voice_id" : voice_name,  # 语音ID
-        "speed" : 1.2,  # 语速
+        "speed" : 1,  # 语速
         "vol" : 1.0,  # 音量
         "pitch" : 0,  # 音调
-        "emotion" : "neutral",  # 情感
+        "emotion" : emotion if emotion in ["happy", "sad", "angry", "fearful", "disgusted", "surprised", "neutral"]  else "neutral",  # 情感
         "sample_rate" : 44100,  # 采样率
-        "bitrate" : 256000,  # 比特率
+        "bitrate" : 128000,  # 比特率
         "format" : 'mp3',  # 音频格式
         "channel" : 1,  # 声道数
         "language_boost" : language_boost
@@ -635,6 +636,7 @@ def tts_multiple(task_id: str, list_script: list, voice_name: str, voice_rate: f
                 voice_rate=voice_rate,
                 voice_pitch=voice_pitch,
                 voice_file=audio_file,
+                emotion=item.get('emotion', "")
             )
 
             if sub_maker is None:

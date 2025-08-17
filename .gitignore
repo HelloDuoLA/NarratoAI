@@ -43,3 +43,4 @@ resource/tts_tmp/*
 test/*
 myCode/*
 pretrained_models/*
+report_images/*
