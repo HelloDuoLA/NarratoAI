@@ -217,9 +217,9 @@ def start_subclip(task_id: str, params: VideoClipParams, subclip_path_videos: di
     7. 语音识别字幕, 并且进行视频裁剪
     '''
     # TODO:语音识别字幕
-    current_date = datetime.now().strftime("%Y%m%d_%H%M")
-    result = { "final_subtitle_file": None}
-    result = perform_speech_recognition(output_video_path, video_name=f"{current_date}_output_video")
+    # current_date = datetime.now().strftime("%Y%m%d_%H%M")
+    # result = { "final_subtitle_file": None}
+    # result = perform_speech_recognition(output_video_path, video_name=f"{current_date}_output_video")
 
     # logger.success(f"任务 {task_id} 已完成, 生成 {len(final_video_paths)} 个视频.")
     # logger.success(f"视频路径: {final_video_paths[0]}")
@@ -228,7 +228,7 @@ def start_subclip(task_id: str, params: VideoClipParams, subclip_path_videos: di
     kwargs = {
         "videos": final_video_paths,
         "combined_videos": combined_video_paths,
-        "subtitle" : result["final_subtitle_file"]
+        # "subtitle" : result["final_subtitle_file"]
     }
     sm.state.update_task(task_id, state=const.TASK_STATE_COMPLETE, progress=100, **kwargs)
     return kwargs
